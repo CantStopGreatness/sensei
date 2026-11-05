@@ -1,0 +1,48 @@
+# lichess-bot config for Sensei. Symlink or copy to lichess-bot/config.yml.
+# Assumes lichess-bot and ChessEngine are cloned side by side, e.g. ~/lichess-bot and ~/ChessEngine.
+# Keys left out here get lichess-bot's own defaults.
+
+# Never commit the token. Put it in the environment instead:
+#   export LICHESS_BOT_TOKEN=lip_...
+token: ""
+url: "https://lichess.org/"
+
+engine:
+  dir: "../ChessEngine/build/"
+  name: "sensei"
+  protocol: "uci"
+  ponder: false            # Sensei doesn't support pondering yet
+  uci_options:
+    Hash: 64
+
+move_overhead: 1000        # ms kept in hand per move for network lag
+
+challenge:
+  concurrency: 1           # one game at a time; search is single-threaded
+  accept_bot: true
+  only_bot: false
+  variants:
+    - standard
+  time_controls:
+    - bullet
+    - blitz
+    - rapid
+  modes:
+    - casual
+    - rated
+  min_base: 60             # nothing faster than 1+0: lag hurts most there
+
+# When idle, challenge other bots to rated blitz so the rating settles quickly.
+matchmaking:
+  allow_matchmaking: true
+  challenge_timeout: 30    # minutes idle before sending a challenge
+  challenge_initial_time:
+    - 180
+  challenge_increment:
+    - 2
+  challenge_mode: "rated"
+  challenge_variant: "standard"
+
+greeting:
+  hello: "Hi! I'm {me}, a chess engine written from scratch in C++. Good luck!"
+  goodbye: "Good game!"

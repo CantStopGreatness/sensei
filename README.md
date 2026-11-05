@@ -33,6 +33,22 @@ python3 tests/match.py NEW OLD --games 200 --tc 5+0.05  # match two builds: Elo 
 
 Perft numbers come from the [Chess Programming Wiki](https://www.chessprogramming.org/Perft_Results). All match, including start position depth 6 (119,060,324) and Kiwipete depth 5 (193,690,690).
 
+## Running on Lichess
+
+Sensei plays through [lichess-bot](https://github.com/lichess-bot-devs/lichess-bot) (Python 3.11+), using `deploy/lichess-bot.yml`.
+
+1. Create a **new** Lichess account. It must have no games played, or it can't become a bot.
+2. Create a token with the `bot:play` scope: <https://lichess.org/account/oauth/token/create?scopes%5B%5D=bot:play&description=lichess-bot>. Lichess shows it only once.
+3. Clone lichess-bot next to this repo and install it:
+   ```bash
+   cd ~ && git clone https://github.com/lichess-bot-devs/lichess-bot.git && cd lichess-bot
+   python3 -m venv venv && . venv/bin/activate && python3 -m pip install -r requirements.txt
+   ln -s ../ChessEngine/deploy/lichess-bot.yml config.yml
+   export LICHESS_BOT_TOKEN=lip_...
+   ```
+4. Upgrade the account to a bot. **This can't be undone**, and the bot starts playing right after: `python3 lichess-bot.py -u`
+5. From then on, start it with `python3 lichess-bot.py`.
+
 ## Results
 
 | Version | Feature added | Elo vs. previous (±error) |
