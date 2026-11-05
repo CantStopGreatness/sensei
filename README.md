@@ -39,3 +39,4 @@ Perft numbers come from the [Chess Programming Wiki](https://www.chessprogrammin
 |---|---|---|
 | v0.1 | Random mover | — |
 | v0.2 | Material + PST eval, alpha-beta, quiescence, MVV-LVA + killers | Beats random 100/100 |
+| v0.3 | Transposition table | +149 ± 47 (200 games, 5s+0.05s, SPRT [0,10] passed) |
