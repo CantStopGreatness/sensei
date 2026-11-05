@@ -150,6 +150,29 @@ int main() {
         check(evaluate(pos) > 80, "advanced passed pawn is worth a lot in the endgame: " + std::to_string(evaluate(pos)));
     }
 
+    std::cout << "\nStatic exchange evaluation\n";
+    {
+        // From the Chess Programming Wiki SEE page, rescored with Sensei's piece values.
+        struct SeeCase { const char* fen; const char* move; int expected; };
+        const std::vector<SeeCase> cases = {
+            {"1k1r4/1pp4p/p7/4p3/8/P5P1/1PP4P/2K1R3 w - - 0 1", "e1e5", 100},                // free pawn
+            {"1k1r3q/1ppn3p/p4b2/4p3/8/P2N2P1/1PP1R1BP/2K1Q3 w - - 0 1", "d3e5", 100 - 320},  // N for P
+            {"4k3/8/8/3p4/4P3/8/8/4K3 w - - 0 1", "e4d5", 100},                              // pawn trade
+            {"4k3/8/2p5/3p4/4P3/8/8/4K3 w - - 0 1", "e4d5", 0},                              // P x P, P x P
+            {"4k3/8/2p5/3r4/4P3/8/8/4K3 w - - 0 1", "e4d5", 500 - 100},                      // P takes R
+            {"4k3/8/2p5/3n4/8/8/3R4/3RK3 w - - 0 1", "d2d5", 320 - 500 + 100},               // R x N, P x R, R x P
+        };
+        for (const auto& c : cases) {
+            Position pos = from_fen(c.fen);
+            MoveList list;
+            generate_legal(pos, list);
+            auto it = std::find_if(list.begin(), list.end(), [&](Move m) { return move_to_uci(m) == c.move; });
+            int got = it == list.end() ? -99999 : see(pos, *it);
+            check(got == c.expected, std::string(c.move) + " in " + c.fen + ": " + std::to_string(got) +
+                                         ", expected " + std::to_string(c.expected));
+        }
+    }
+
     std::cout << "\nMaterial\n";
     struct Tactic { const char* fen; std::vector<std::string> good; const char* what; };
     const std::vector<Tactic> tactics = {

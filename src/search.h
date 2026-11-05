@@ -20,6 +20,11 @@ struct SearchResult {
     uint64_t nodes = 0;
 };
 
+// Static exchange evaluation of a capture, in centipawns for the side making it: material won
+// or lost on the target square if both sides keep recapturing with their least valuable piece.
+// Promotions are treated as plain captures.
+int see(const Position& pos, Move m);
+
 // Iterative deepening alpha-beta. Prints UCI "info" lines to `out` after each depth.
 // Returns early when `stop` becomes true or time runs out; depth 1 always completes.
 SearchResult search(Position& pos, const SearchLimits& limits, const std::atomic<bool>& stop, std::ostream& out);
