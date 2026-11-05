@@ -5,9 +5,9 @@
 
 static int usage() {
     std::cerr << "usage:\n"
-                 "  engine print [fen]\n"
-                 "  engine perft <depth> [fen]\n"
-                 "  engine divide <depth> [fen]\n"
+                 "  sensei print [fen]\n"
+                 "  sensei perft <depth> [fen]\n"
+                 "  sensei divide <depth> [fen]\n"
                  "fen defaults to the start position\n";
     return 1;
 }

@@ -1,6 +1,6 @@
-# Chess Engine (name TBD)
+# Sensei
 
-A UCI chess engine in C++17 with bitboard move generation. Work in progress: board, FEN and perft-verified legal move generation are done; UCI and search are next.
+Sensei is a UCI chess engine in C++17 with bitboard move generation. Work in progress: board, FEN and perft-verified legal move generation are done; UCI and search are next.
 
 ## Build
 
@@ -12,9 +12,9 @@ cmake --build build
 ## Use
 
 ```bash
-./build/engine print [fen]           # pretty-print a position
-./build/engine perft <depth> [fen]   # count leaf nodes
-./build/engine divide <depth> [fen]  # perft split by root move
+./build/sensei print [fen]           # pretty-print a position
+./build/sensei perft <depth> [fen]   # count leaf nodes
+./build/sensei divide <depth> [fen]  # perft split by root move
 ```
 
 ## Tests

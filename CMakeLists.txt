@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(ChessEngine CXX)
+project(Sensei CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -12,8 +12,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_library(core src/bitboard.cpp src/position.cpp src/movegen.cpp src/perft.cpp)
 target_include_directories(core PUBLIC src)
 
-add_executable(engine src/main.cpp)
-target_link_libraries(engine core)
+add_executable(sensei src/main.cpp)
+target_link_libraries(sensei core)
 
 enable_testing()
 add_executable(perft_tests tests/perft_tests.cpp)
