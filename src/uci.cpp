@@ -1,6 +1,7 @@
 #include "uci.h"
 #include "movegen.h"
 #include "search.h"
+#include "tt.h"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -101,12 +102,21 @@ void uci_loop(std::istream& in, std::ostream& out) {
         ss >> cmd;
 
         if (cmd == "uci") {
-            say(out, "id name Sensei\nid author Aryan Thakur\nuciok");
+            say(out, "id name Sensei\nid author Aryan Thakur\n"
+                     "option name Hash type spin default 16 min 1 max 1024\nuciok");
         } else if (cmd == "isready") {
             say(out, "readyok");
         } else if (cmd == "ucinewgame") {
             finish_search();
             pos.set_fen(START_FEN);
+            TT.clear();
+        } else if (cmd == "setoption") {
+            // "setoption name Hash value <MB>"; other options are ignored.
+            finish_search();
+            std::string name_kw, name, value_kw;
+            long mb = 0;
+            if (ss >> name_kw >> name >> value_kw >> mb && name == "Hash" && mb >= 1 && mb <= 1024)
+                TT.resize(size_t(mb));
         } else if (cmd == "position") {
             finish_search();
             set_position(pos, ss, out);

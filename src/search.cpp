@@ -1,6 +1,7 @@
 #include "search.h"
 #include "eval.h"
 #include "movegen.h"
+#include "tt.h"
 #include "uci.h"
 #include <chrono>
 #include <sstream>
@@ -33,9 +34,9 @@ struct Searcher {
         return aborted;
     }
 
-    // Higher = searched earlier: previous best at the root, captures by MVV-LVA, killers.
-    int score_move(Move m, int ply) const {
-        if (ply == 0 && m == root_best) return 1000000;
+    // Higher = searched earlier: hash move, captures by MVV-LVA, promotions, killers.
+    int score_move(Move m, int ply, Move hash_move) const {
+        if (m == hash_move) return 1000000;
         if (is_capture(m)) {
             int victim = flags_of(m) == EP_CAPTURE ? PAWN : type_of(pos.board[to_sq(m)]);
             int attacker = type_of(pos.board[from_sq(m)]);
@@ -47,9 +48,9 @@ struct Searcher {
         return 0;
     }
 
-    void order(MoveList& list, int ply) const {
+    void order(MoveList& list, int ply, Move hash_move = 0) const {
         int scores[256];
-        for (int i = 0; i < list.size; i++) scores[i] = score_move(list.moves[i], ply);
+        for (int i = 0; i < list.size; i++) scores[i] = score_move(list.moves[i], ply, hash_move);
         // Insertion sort, descending; lists are short.
         for (int i = 1; i < list.size; i++) {
             Move m = list.moves[i];
@@ -102,12 +103,25 @@ struct Searcher {
         if (should_stop()) return 0;
         if (ply >= MAX_PLY - 1) return evaluate(pos);
 
+        // A good-enough earlier result for this position ends the search here. Not at the
+        // root, which must always produce a move and a PV.
+        Move hash_move = ply == 0 ? root_best : 0;
+        if (const TTEntry* e = TT.probe(pos.hash)) {
+            if (ply > 0) hash_move = e->move;
+            int score = score_from_tt(e->score, ply);
+            if (ply > 0 && e->depth >= depth &&
+                (e->bound == BOUND_EXACT || (e->bound == BOUND_LOWER && score >= beta) ||
+                 (e->bound == BOUND_UPPER && score <= alpha)))
+                return score;
+        }
+
         MoveList list;
         generate_legal(pos, list);
         if (list.size == 0) return in_check ? -MATE + ply : 0;  // checkmate or stalemate
-        order(list, ply);
+        order(list, ply, hash_move);
 
-        int best = -MATE;
+        int alpha_orig = alpha, best = -MATE;
+        Move best_move = 0;
         for (Move m : list) {
             Undo u;
             pos.make_move(m, u);
@@ -118,6 +132,7 @@ struct Searcher {
             if (score > best) best = score;
             if (score > alpha) {
                 alpha = score;
+                best_move = m;
                 pv[ply][0] = m;
                 for (int i = 0; i < pv_len[ply + 1]; i++) pv[ply][i + 1] = pv[ply + 1][i];
                 pv_len[ply] = pv_len[ply + 1] + 1;
@@ -130,6 +145,8 @@ struct Searcher {
                 break;
             }
         }
+        Bound bound = best >= beta ? BOUND_LOWER : alpha > alpha_orig ? BOUND_EXACT : BOUND_UPPER;
+        TT.store(pos.hash, depth, best, bound, best_move, ply);
         return best;
     }
 };

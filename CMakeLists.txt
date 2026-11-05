@@ -10,7 +10,7 @@ add_compile_options(-Wall -Wextra)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(Threads REQUIRED)
-add_library(core src/bitboard.cpp src/position.cpp src/movegen.cpp src/perft.cpp src/uci.cpp src/eval.cpp src/search.cpp)
+add_library(core src/bitboard.cpp src/position.cpp src/movegen.cpp src/perft.cpp src/uci.cpp src/eval.cpp src/search.cpp src/tt.cpp)
 target_include_directories(core PUBLIC src)
 target_link_libraries(core PUBLIC Threads::Threads)
 

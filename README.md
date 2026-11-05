@@ -1,6 +1,6 @@
 # Sensei
 
-Sensei is a UCI chess engine in C++17 with bitboard move generation. It uses alpha-beta search with iterative deepening and quiescence, plus a material and piece-square-table evaluation. Next up: a transposition table.
+Sensei is a UCI chess engine in C++17 with bitboard move generation. It uses alpha-beta search with iterative deepening and quiescence, plus a material and piece-square-table evaluation and a transposition table (UCI option `Hash`, in MB).
 
 ## Build
 
@@ -28,6 +28,7 @@ Run `./build/sensei` with no arguments for UCI mode, and point Cute Chess, Arena
 pip install chess
 python3 tests/selfplay.py --games 100              # self-play over UCI, every move checked by python-chess
 python3 tests/selfplay.py --games 100 --vs-random  # must beat a random mover every game
+python3 tests/match.py NEW OLD --games 200 --tc 5+0.05  # match two builds: Elo +/- error and SPRT
 ```
 
 Perft numbers come from the [Chess Programming Wiki](https://www.chessprogramming.org/Perft_Results). All match, including start position depth 6 (119,060,324) and Kiwipete depth 5 (193,690,690).
