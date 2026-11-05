@@ -140,7 +140,9 @@ int main() {
     std::cout << "\nEvaluation\n";
     for (const char* fen : {START_FEN, "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
                             "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1",
-                            "8/5pk1/6p1/1P6/8/4B1P1/5PK1/8 w - - 0 1"}) {
+                            "8/5pk1/6p1/1P6/8/4B1P1/5PK1/8 w - - 0 1",
+                            "r1bq1rk1/ppp2ppp/2n2n2/3pp1B1/1bPP4/2N1PN2/PP3PPP/R2QKB1R w KQ - 0 7",
+                            "r4rk1/pp3ppp/2p5/4q3/3n4/2NB1Q2/PPP2PPP/R4RK1 w - - 0 1"}) {
         Position a = from_fen(fen), b = from_fen(mirror_fen(fen));
         check(evaluate(a) == evaluate(b), std::string("colour-flipped position scores the same: ") + fen);
     }
