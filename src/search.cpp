@@ -4,6 +4,7 @@
 #include "tt.h"
 #include "uci.h"
 #include <chrono>
+#include <cstdlib>
 #include <sstream>
 
 namespace {
@@ -178,7 +179,9 @@ SearchResult search(Position& pos, const SearchLimits& limits, const std::atomic
         for (int i = 0; i < s.pv_len[0]; i++) info << ' ' << move_to_uci(s.pv[0][i]);
         say(out, info.str());
 
-        if (score > MATE - MAX_PLY || score < -MATE + MAX_PLY) break;  // mate found; deeper won't change it
+        // Stop on a mate only once the full-width search covers it: then no shorter mate exists.
+        // (A warm TT or check extensions can show a longer mate at a shallower depth.)
+        if (MATE - std::abs(score) <= depth) break;
         // The next depth takes several times longer than this one; don't start what can't finish.
         if (limits.time_ms >= 0 && ms * 2 > limits.time_ms) break;
     }

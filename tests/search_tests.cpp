@@ -94,6 +94,13 @@ int main() {
               "mate in " + std::to_string(p.moves) + ": played " + best + ", " + p.fen);
     }
     {
+        // Second search with a warm TT used to stop at depth 1 on a stored mate in 4 (Qc5+).
+        Position pos = from_fen("8/k7/2K5/8/8/8/2Q5/8 w - - 0 1");
+        run(pos, 10);
+        SearchResult r = run(pos, 10);
+        check(r.score == MATE - 3, "warm TT still finds the shortest mate (mate in 2): played " + move_to_uci(r.best));
+    }
+    {
         Position pos = from_fen("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1");
         check(run(pos, 3).best == 0, "stalemate: no move, no crash");
     }
