@@ -1,6 +1,6 @@
 # Sensei
 
-Sensei is a UCI chess engine in C++17 with bitboard move generation. Work in progress: board, FEN, perft-verified move generation and UCI are done. It currently plays random legal moves; search is next.
+Sensei is a UCI chess engine in C++17 with bitboard move generation. It uses alpha-beta search with iterative deepening and quiescence, plus a material and piece-square-table evaluation. Next up: a transposition table.
 
 ## Build
 
@@ -24,7 +24,17 @@ Run `./build/sensei` with no arguments for UCI mode, and point Cute Chess, Arena
 ```bash
 ./build/perft_tests          # FEN round-trip + perft on 7 standard positions (~1s)
 ./build/perft_tests --deep   # one ply deeper on each, up to 194M nodes (~10s)
-pip install chess && python3 tests/selfplay.py 500   # self-play over UCI, every move checked by python-chess
+./build/search_tests         # hashing, repetition, mate-in-1/2 puzzles, hanging pieces, depth-6 speed
+pip install chess
+python3 tests/selfplay.py --games 100              # self-play over UCI, every move checked by python-chess
+python3 tests/selfplay.py --games 100 --vs-random  # must beat a random mover every game
 ```
 
 Perft numbers come from the [Chess Programming Wiki](https://www.chessprogramming.org/Perft_Results). All match, including start position depth 6 (119,060,324) and Kiwipete depth 5 (193,690,690).
+
+## Results
+
+| Version | Feature added | Elo vs. previous (±error) |
+|---|---|---|
+| v0.1 | Random mover | — |
+| v0.2 | Material + PST eval, alpha-beta, quiescence, MVV-LVA + killers | Beats random 100/100 |

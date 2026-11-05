@@ -4,10 +4,43 @@
 
 static const std::string PIECE_CHARS = "PNBRQKpnbrqk";
 
+static const struct Zobrist {
+    uint64_t piece[12][64], castling[16], ep[65], side;
+    Zobrist() {
+        uint64_t x = 0x9E3779B97F4A7C15ULL;
+        auto next = [&x] {  // splitmix64
+            uint64_t z = (x += 0x9E3779B97F4A7C15ULL);
+            z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
+            z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+            return z ^ (z >> 31);
+        };
+        for (auto& p : piece) for (auto& k : p) k = next();
+        for (auto& k : castling) k = next();
+        for (auto& k : ep) k = next();
+        ep[NO_SQ] = 0;
+        side = next();
+    }
+} ZOBRIST;
+
+uint64_t Position::compute_hash() const {
+    uint64_t h = ZOBRIST.castling[castling] ^ ZOBRIST.ep[ep] ^ (side == BLACK ? ZOBRIST.side : 0);
+    for (int sq = 0; sq < 64; sq++)
+        if (board[sq] != NO_PIECE) h ^= ZOBRIST.piece[board[sq]][sq];
+    return h;
+}
+
+bool Position::is_repetition() const {
+    int n = int(history.size());
+    for (int i = n - 2; i >= 0 && i >= n - halfmove; i -= 2)
+        if (history[i] == hash) return true;
+    return false;
+}
+
 void Position::put(Piece p, int sq) {
     pieces[p] |= sq_bb(sq);
     occ[color_of(p)] |= sq_bb(sq);
     board[sq] = p;
+    hash ^= ZOBRIST.piece[p][sq];
 }
 
 void Position::remove(int sq) {
@@ -15,6 +48,7 @@ void Position::remove(int sq) {
     pieces[p] &= ~sq_bb(sq);
     occ[color_of(p)] &= ~sq_bb(sq);
     board[sq] = NO_PIECE;
+    hash ^= ZOBRIST.piece[p][sq];
 }
 
 void Position::move_piece(int from, int to) {
@@ -89,6 +123,7 @@ bool Position::set_fen(const std::string& fen) {
     // The side that just moved can't have left its king in check.
     if (p.attacked(p.king_sq(!p.side), p.side)) return false;
 
+    p.hash = p.compute_hash();
     *this = p;
     return true;
 }
@@ -165,6 +200,8 @@ void Position::make_move(Move m, Undo& u) {
     int from = from_sq(m), to = to_sq(m), fl = flags_of(m);
     Piece moving = board[from];
     u = {NO_PIECE, castling, ep, halfmove};
+    history.push_back(hash);
+    hash ^= ZOBRIST.castling[castling] ^ ZOBRIST.ep[ep] ^ ZOBRIST.side;
 
     if (fl == EP_CAPTURE) {
         int cap = to + (side == WHITE ? -8 : 8);
@@ -186,6 +223,7 @@ void Position::make_move(Move m, Undo& u) {
     halfmove = (type_of(moving) == PAWN || u.captured != NO_PIECE) ? 0 : halfmove + 1;
     ep = fl == DOUBLE_PUSH ? (from + to) / 2 : NO_SQ;
     castling &= CASTLE_MASK.m[from] & CASTLE_MASK.m[to];
+    hash ^= ZOBRIST.castling[castling] ^ ZOBRIST.ep[ep];
     if (side == BLACK) fullmove++;
     side = !side;
 }
@@ -208,4 +246,6 @@ void Position::unmake_move(Move m, const Undo& u) {
     castling = u.castling;
     ep = u.ep;
     halfmove = u.halfmove;
+    hash = history.back();
+    history.pop_back();
 }

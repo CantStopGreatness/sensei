@@ -1,8 +1,12 @@
 #include "uci.h"
 #include "movegen.h"
-#include <random>
+#include "search.h"
+#include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <sstream>
 #include <string>
+#include <thread>
 
 static Move parse_move(Position& pos, const std::string& s) {
     MoveList list;
@@ -43,10 +47,44 @@ static void set_position(Position& pos, std::istringstream& ss, std::ostream& ou
     pos = p;
 }
 
+// Turns "go" arguments into search limits. Clock budget: remaining / 30 + increment.
+static SearchLimits parse_go(std::istringstream& ss, Color side, bool& infinite) {
+    SearchLimits limits;
+    int64_t time[2] = {-1, -1}, inc[2] = {0, 0}, movetime = -1;
+    int movestogo = 0;
+    infinite = false;
+    for (std::string t; ss >> t;) {
+        if (t == "infinite") infinite = true;
+        else if (t == "depth") ss >> limits.depth;
+        else if (t == "movetime") ss >> movetime;
+        else if (t == "wtime") ss >> time[WHITE];
+        else if (t == "btime") ss >> time[BLACK];
+        else if (t == "winc") ss >> inc[WHITE];
+        else if (t == "binc") ss >> inc[BLACK];
+        else if (t == "movestogo") ss >> movestogo;
+    }
+    limits.depth = std::clamp(limits.depth, 1, MAX_PLY - 1);
+    if (infinite) return limits;
+    if (movetime >= 0) {
+        limits.time_ms = movetime;
+    } else if (time[side] >= 0) {
+        int64_t left = time[side];
+        int divisor = movestogo > 0 ? std::min(movestogo, 30) : 30;
+        // Keep 50 ms in hand for process and network lag.
+        limits.time_ms = std::max<int64_t>(1, std::min(left / divisor + inc[side], left - 50));
+    }
+    return limits;
+}
+
 void uci_loop(std::istream& in, std::ostream& out) {
     Position pos;
     pos.set_fen(START_FEN);
-    std::mt19937 rng(std::random_device{}());
+    std::atomic<bool> stop{false};
+    std::thread searcher;
+    auto finish_search = [&] {
+        stop = true;
+        if (searcher.joinable()) searcher.join();
+    };
 
     for (std::string line; std::getline(in, line);) {
         std::istringstream ss(line);
@@ -58,22 +96,30 @@ void uci_loop(std::istream& in, std::ostream& out) {
         } else if (cmd == "isready") {
             out << "readyok" << std::endl;
         } else if (cmd == "ucinewgame") {
+            finish_search();
             pos.set_fen(START_FEN);
         } else if (cmd == "position") {
+            finish_search();
             set_position(pos, ss, out);
         } else if (cmd == "go") {
-            // v0.1 random mover: go's depth/movetime/clock arguments are ignored.
-            // ponytail: answers instantly, so "stop" has nothing to interrupt; search
-            // (Milestone 3) needs a search thread for stop to mean anything.
-            MoveList list;
-            generate_legal(pos, list);
-            Move best = list.size ? list.moves[rng() % list.size] : 0;
-            out << "bestmove " << (best ? move_to_uci(best) : "0000") << std::endl;
+            finish_search();
+            bool infinite;
+            SearchLimits limits = parse_go(ss, pos.side, infinite);
+            stop = false;
+            searcher = std::thread([&out, &stop, limits, infinite, p = pos]() mutable {
+                SearchResult r = search(p, limits, stop, out);
+                // UCI: after "go infinite", bestmove waits for "stop".
+                while (infinite && !stop) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                out << "bestmove " << (r.best ? move_to_uci(r.best) : "0000") << std::endl;
+            });
+        } else if (cmd == "stop") {
+            finish_search();
         } else if (cmd == "d") {
             out << pos.pretty() << std::flush;  // debug helper, not part of UCI
         } else if (cmd == "quit") {
             break;
         }
-        // "stop" and unknown commands are ignored, as UCI requires.
+        // Unknown commands are ignored, as UCI requires.
     }
+    finish_search();
 }
