@@ -1,8 +1,10 @@
 // Milestone 3 checks: hashing, repetition, mates, not hanging pieces, search speed.
 // Mate puzzles and their solution sets were verified independently with python-chess.
+#include "eval.h"
 #include "movegen.h"
 #include "search.h"
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <iostream>
 #include <sstream>
@@ -19,6 +21,27 @@ static Position from_fen(const std::string& fen) {
     Position pos;
     if (!pos.set_fen(fen)) std::cout << "  bad test FEN " << fen << '\n';
     return pos;
+}
+
+// The same position with colours swapped and the board flipped top to bottom.
+static std::string mirror_fen(const std::string& fen) {
+    std::istringstream in(fen);
+    std::string board, side, castle, ep, rest;
+    in >> board >> side >> castle >> ep;
+    std::getline(in, rest);
+    std::vector<std::string> ranks;
+    std::stringstream bs(board);
+    for (std::string r; std::getline(bs, r, '/');) ranks.push_back(r);
+    std::string out;
+    for (int i = int(ranks.size()) - 1; i >= 0; i--) out += ranks[i] + (i ? "/" : "");
+    auto swap_case = [](std::string s) {
+        for (char& c : s) c = std::isupper(c) ? char(std::tolower(c)) : char(std::toupper(c));
+        return s;
+    };
+    std::string c = swap_case(castle), cs;
+    for (char k : std::string("KQkq")) if (c.find(k) != std::string::npos) cs += k;
+    if (ep != "-") ep[1] = ep[1] == '3' ? '6' : '3';
+    return swap_case(out) + (side == "w" ? " b " : " w ") + (cs.empty() ? "-" : cs) + " " + ep + rest;
 }
 
 static void play(Position& pos, const std::vector<std::string>& moves) {
@@ -112,6 +135,19 @@ int main() {
     {
         Position pos = from_fen("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1");
         check(run(pos, 3).best == 0, "stalemate: no move, no crash");
+    }
+
+    std::cout << "\nEvaluation\n";
+    for (const char* fen : {START_FEN, "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+                            "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1",
+                            "8/5pk1/6p1/1P6/8/4B1P1/5PK1/8 w - - 0 1"}) {
+        Position a = from_fen(fen), b = from_fen(mirror_fen(fen));
+        check(evaluate(a) == evaluate(b), std::string("colour-flipped position scores the same: ") + fen);
+    }
+    {
+        // Same material; White's b-pawn is passed and far advanced, so White should be clearly better.
+        Position pos = from_fen("8/5pk1/1P4p1/8/8/6P1/5PK1/8 w - - 0 1");
+        check(evaluate(pos) > 80, "advanced passed pawn is worth a lot in the endgame: " + std::to_string(evaluate(pos)));
     }
 
     std::cout << "\nMaterial\n";
