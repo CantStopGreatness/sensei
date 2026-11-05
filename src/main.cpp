@@ -1,10 +1,12 @@
 #include "perft.h"
+#include "uci.h"
 #include <chrono>
 #include <iostream>
 #include <string>
 
 static int usage() {
     std::cerr << "usage:\n"
+                 "  sensei                       (no arguments: UCI mode)\n"
                  "  sensei print [fen]\n"
                  "  sensei perft <depth> [fen]\n"
                  "  sensei divide <depth> [fen]\n"
@@ -14,7 +16,10 @@ static int usage() {
 
 int main(int argc, char** argv) {
     init_bitboards();
-    if (argc < 2) return usage();
+    if (argc < 2) {
+        uci_loop(std::cin, std::cout);
+        return 0;
+    }
     std::string cmd = argv[1];
     bool has_depth = cmd == "perft" || cmd == "divide";
     if (!has_depth && cmd != "print") return usage();

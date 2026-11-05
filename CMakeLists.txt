@@ -9,7 +9,7 @@ endif()
 add_compile_options(-Wall -Wextra)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-add_library(core src/bitboard.cpp src/position.cpp src/movegen.cpp src/perft.cpp)
+add_library(core src/bitboard.cpp src/position.cpp src/movegen.cpp src/perft.cpp src/uci.cpp)
 target_include_directories(core PUBLIC src)
 
 add_executable(sensei src/main.cpp)
