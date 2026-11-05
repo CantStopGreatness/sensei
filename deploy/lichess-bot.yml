@@ -1,5 +1,6 @@
 # lichess-bot config for Sensei. Symlink or copy to lichess-bot/config.yml.
-# Assumes lichess-bot and ChessEngine are cloned side by side, e.g. ~/lichess-bot and ~/ChessEngine.
+# Assumes lichess-bot sits next to a release clone of this repo, ~/lichess-bot and ~/sensei-release,
+# kept on main, so development branches and builds never reach live games.
 # Keys left out here get lichess-bot's own defaults.
 
 # Never commit the token. Put it in the environment instead:
@@ -8,7 +9,7 @@ token: ""
 url: "https://lichess.org/"
 
 engine:
-  dir: "../ChessEngine/build/"
+  dir: "../sensei-release/build/"
   name: "sensei"
   protocol: "uci"
   ponder: false            # Sensei doesn't support pondering yet

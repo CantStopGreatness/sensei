@@ -41,15 +41,21 @@ Sensei plays through [lichess-bot](https://github.com/lichess-bot-devs/lichess-b
 
 1. Create a **new** Lichess account. It must have no games played, or it can't become a bot.
 2. Create a token with the `bot:play` scope: <https://lichess.org/account/oauth/token/create?scopes%5B%5D=bot:play&description=lichess-bot>. Lichess shows it only once.
-3. Clone lichess-bot next to this repo and install it:
+3. Make a release clone of Sensei just for the bot, so the bot only ever plays `main`, never a development build. Then clone lichess-bot next to it and install it:
    ```bash
-   cd ~ && git clone https://github.com/lichess-bot-devs/lichess-bot.git && cd lichess-bot
+   cd ~ && git clone https://github.com/CantStopGreatness/sensei.git sensei-release
+   cmake -S sensei-release -B sensei-release/build && cmake --build sensei-release/build --target sensei
+   git clone https://github.com/lichess-bot-devs/lichess-bot.git && cd lichess-bot
    python3 -m venv venv && . venv/bin/activate && python3 -m pip install -r requirements.txt
-   ln -s ../ChessEngine/deploy/lichess-bot.yml config.yml
+   ln -s ../sensei-release/deploy/lichess-bot.yml config.yml
    export LICHESS_BOT_TOKEN=lip_...
    ```
 4. Upgrade the account to a bot. **This can't be undone**, and the bot starts playing right after: `python3 lichess-bot.py -u`
 5. From then on, start it with `python3 lichess-bot.py`.
+
+The config uses the Lichess masters database as an opening book and Lichess's online tablebases for endgames with 7 or fewer pieces.
+
+To put a new version on Lichess after merging to `main`: `cd ~/sensei-release && git pull && cmake --build build --target sensei`, then restart lichess-bot.
 
 ## Results
 
