@@ -57,7 +57,9 @@ static void set_position(Position& pos, std::istringstream& ss, std::ostream& ou
     pos = p;
 }
 
-// Turns "go" arguments into search limits. Clock budget: remaining / 30 + increment.
+// Turns "go" arguments into search limits. With a clock, the target (soft) time is
+// remaining / 25 + 3/4 of the increment; the search may run to 4x that (hard), but never
+// past a third of the remaining time.
 static SearchLimits parse_go(std::istringstream& ss, Color side, bool& infinite) {
     SearchLimits limits;
     int64_t time[2] = {-1, -1}, inc[2] = {0, 0}, movetime = -1;
@@ -78,10 +80,11 @@ static SearchLimits parse_go(std::istringstream& ss, Color side, bool& infinite)
     if (movetime >= 0) {
         limits.time_ms = movetime;
     } else if (time[side] >= 0) {
-        int64_t left = time[side];
-        int divisor = movestogo > 0 ? std::min(movestogo, 30) : 30;
-        // Keep 100 ms in hand for process and network lag.
-        limits.time_ms = std::max<int64_t>(1, std::min(left / divisor + inc[side], left - 100));
+        int64_t left = std::max<int64_t>(1, time[side] - 50);  // keep 50 ms for process lag
+        int divisor = movestogo > 0 ? std::min(movestogo, 25) : 25;
+        int64_t soft = left / divisor + inc[side] * 3 / 4;
+        limits.time_ms = std::max<int64_t>(1, std::min(soft * 4, left / 3));
+        limits.soft_ms = std::min(soft, limits.time_ms);
     }
     return limits;
 }

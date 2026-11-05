@@ -214,12 +214,14 @@ std::string score_string(int score) {
 SearchResult search(Position& pos, const SearchLimits& limits, const std::atomic<bool>& stop, std::ostream& out) {
     Searcher s{pos, stop, Clock::now(), limits.time_ms};
     SearchResult result;
+    int stable = 0;  // iterations in a row the best move hasn't changed
 
     for (int depth = 1; depth <= limits.depth; depth++) {
         s.can_abort = depth > 1;
         int score = s.negamax(depth, -MATE - 1, MATE + 1, 0);
         if (s.aborted) break;  // partial iteration: keep the last complete one
         if (s.pv_len[0] == 0) break;  // no legal moves
+        stable = s.pv[0][0] == result.best ? stable + 1 : 0;
         result = {s.pv[0][0], score, depth, s.nodes};
         s.root_best = result.best;
 
@@ -233,8 +235,14 @@ SearchResult search(Position& pos, const SearchLimits& limits, const std::atomic
         // Stop on a mate only once the full-width search covers it: then no shorter mate exists.
         // (A warm TT or check extensions can show a longer mate at a shallower depth.)
         if (MATE - std::abs(score) <= depth) break;
-        // The next depth takes several times longer than this one; don't start what can't finish.
-        if (limits.time_ms >= 0 && ms * 2 > limits.time_ms) break;
+        // The next depth takes about twice as long as everything so far; don't start what can't
+        // finish by the target. Spend longer while the best move keeps changing, less once it's settled.
+        if (limits.soft_ms >= 0) {
+            double factor = stable == 0 ? 1.5 : stable >= 4 ? 0.6 : 1.0;
+            if (ms * 2 > limits.soft_ms * factor) break;
+        } else if (limits.time_ms >= 0 && ms * 2 > limits.time_ms) {
+            break;
+        }
     }
     result.nodes = s.nodes;
     return result;

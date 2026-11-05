@@ -9,7 +9,8 @@ constexpr int MATE = 32000;  // mate in N plies scores MATE - N
 
 struct SearchLimits {
     int depth = MAX_PLY - 1;
-    int64_t time_ms = -1;  // hard limit for this move; -1 = no limit
+    int64_t time_ms = -1;  // hard limit for this move: abort the search here; -1 = no limit
+    int64_t soft_ms = -1;  // target time: don't start a depth that likely can't finish by then
 };
 
 struct SearchResult {
