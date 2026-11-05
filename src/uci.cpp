@@ -4,9 +4,18 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <thread>
+
+void say(std::ostream& out, const std::string& line) {
+    static std::mutex m;
+    std::lock_guard<std::mutex> lock(m);
+    out << line;
+    if (line.empty() || line.back() != '\n') out << '\n';
+    out << std::flush;
+}
 
 static Move parse_move(Position& pos, const std::string& s) {
     MoveList list;
@@ -26,19 +35,19 @@ static void set_position(Position& pos, std::istringstream& ss, std::ostream& ou
     } else if (token == "fen") {
         while (ss >> token && token != "moves") fen += token + ' ';
     } else {
-        out << "info string bad position command" << std::endl;
+        say(out, "info string bad position command");
         return;
     }
 
     Position p;
     if (!p.set_fen(fen)) {
-        out << "info string invalid fen: " << fen << std::endl;
+        say(out, "info string invalid fen: " + fen);
         return;
     }
     while (ss >> token) {
         Move m = parse_move(p, token);
         if (!m) {
-            out << "info string illegal move: " << token << std::endl;
+            say(out, "info string illegal move: " + token);
             return;
         }
         Undo u;
@@ -70,8 +79,8 @@ static SearchLimits parse_go(std::istringstream& ss, Color side, bool& infinite)
     } else if (time[side] >= 0) {
         int64_t left = time[side];
         int divisor = movestogo > 0 ? std::min(movestogo, 30) : 30;
-        // Keep 50 ms in hand for process and network lag.
-        limits.time_ms = std::max<int64_t>(1, std::min(left / divisor + inc[side], left - 50));
+        // Keep 100 ms in hand for process and network lag.
+        limits.time_ms = std::max<int64_t>(1, std::min(left / divisor + inc[side], left - 100));
     }
     return limits;
 }
@@ -92,9 +101,9 @@ void uci_loop(std::istream& in, std::ostream& out) {
         ss >> cmd;
 
         if (cmd == "uci") {
-            out << "id name Sensei\nid author Aryan Thakur\nuciok" << std::endl;
+            say(out, "id name Sensei\nid author Aryan Thakur\nuciok");
         } else if (cmd == "isready") {
-            out << "readyok" << std::endl;
+            say(out, "readyok");
         } else if (cmd == "ucinewgame") {
             finish_search();
             pos.set_fen(START_FEN);
@@ -110,12 +119,12 @@ void uci_loop(std::istream& in, std::ostream& out) {
                 SearchResult r = search(p, limits, stop, out);
                 // UCI: after "go infinite", bestmove waits for "stop".
                 while (infinite && !stop) std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                out << "bestmove " << (r.best ? move_to_uci(r.best) : "0000") << std::endl;
+                say(out, "bestmove " + (r.best ? move_to_uci(r.best) : "0000"));
             });
         } else if (cmd == "stop") {
             finish_search();
         } else if (cmd == "d") {
-            out << pos.pretty() << std::flush;  // debug helper, not part of UCI
+            say(out, pos.pretty());  // debug helper, not part of UCI
         } else if (cmd == "quit") {
             break;
         }

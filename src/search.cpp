@@ -1,6 +1,7 @@
 #include "search.h"
 #include "eval.h"
 #include "movegen.h"
+#include "uci.h"
 #include <chrono>
 #include <sstream>
 
@@ -158,7 +159,7 @@ SearchResult search(Position& pos, const SearchLimits& limits, const std::atomic
         info << "info depth " << depth << " score " << score_string(score) << " nodes " << s.nodes
              << " nps " << s.nodes * 1000 / (ms > 0 ? ms : 1) << " time " << ms << " pv";
         for (int i = 0; i < s.pv_len[0]; i++) info << ' ' << move_to_uci(s.pv[0][i]);
-        out << info.str() << std::endl;
+        say(out, info.str());
 
         if (score > MATE - MAX_PLY || score < -MATE + MAX_PLY) break;  // mate found; deeper won't change it
         // The next depth takes several times longer than this one; don't start what can't finish.
