@@ -15,6 +15,22 @@ engine:
   uci_options:
     Hash: 64
 
+  # Moves fetched from Lichess instead of searched. Both need at least min_time seconds left.
+  online_moves:
+    max_out_of_book_moves: 10    # give up on the book after this many misses in a game
+    lichess_opening_explorer:    # opening book: the masters database
+      enabled: true
+      min_time: 20
+      source: "masters"
+      sort: "winrate"            # best-scoring move among well-played ones
+      min_games: 25
+    online_egtb:                 # perfect endgame play with 7 pieces or fewer
+      enabled: true
+      min_time: 20
+      max_pieces: 7
+      source: "lichess"
+      move_quality: "best"
+
 move_overhead: 1000        # ms kept in hand per move for network lag
 
 challenge:
