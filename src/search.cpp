@@ -94,7 +94,7 @@ struct Searcher {
         return best;
     }
 
-    int negamax(int depth, int alpha, int beta, int ply) {
+    int negamax(int depth, int alpha, int beta, int ply, bool allow_null = true) {
         pv_len[ply] = 0;
         if (ply > 0 && (pos.halfmove >= 100 || pos.is_repetition())) return 0;
         bool in_check = pos.in_check();
@@ -114,6 +114,21 @@ struct Searcher {
                 (e->bound == BOUND_EXACT || (e->bound == BOUND_LOWER && score >= beta) ||
                  (e->bound == BOUND_UPPER && score <= alpha)))
                 return score;
+        }
+
+        // Null-move pruning: if passing still leaves us >= beta after a shallower search,
+        // a real move will too. Unsound in zugzwang, so skip with only king and pawns.
+        Color us = pos.side;
+        bool has_pieces = pos.occ[us] & ~(pos.pieces[make_piece(us, PAWN)] | pos.pieces[make_piece(us, KING)]);
+        if (allow_null && ply > 0 && !in_check && depth >= 3 && has_pieces && beta < MATE - MAX_PLY &&
+            evaluate(pos) >= beta) {
+            int r = depth > 6 ? 3 : 2;
+            Undo u;
+            pos.make_null(u);
+            int score = -negamax(depth - 1 - r, -beta, -beta + 1, ply + 1, false);
+            pos.unmake_null(u);
+            if (aborted) return 0;
+            if (score >= beta) return score >= MATE - MAX_PLY ? beta : score;  // don't trust null-move mates
         }
 
         MoveList list;

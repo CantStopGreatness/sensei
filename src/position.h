@@ -37,6 +37,9 @@ struct Position {
 
     void make_move(Move m, Undo& u);
     void unmake_move(Move m, const Undo& u);
+    // Pass the turn (for null-move pruning). Never legal in real chess; search only.
+    void make_null(Undo& u);
+    void unmake_null(const Undo& u);
 
 private:
     void put(Piece p, int sq);
