@@ -72,6 +72,15 @@ int main() {
         play(pos, {"f6g8"});
         check(pos.is_repetition() && pos.hash == start, "knight shuffle repeats the start position");
     }
+    {
+        Position pos = from_fen("rnbqkbnr/ppp1pppp/8/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 3");
+        std::string fen = pos.fen();
+        Undo u;
+        pos.make_null(u);
+        bool ok = pos.hash == pos.compute_hash() && pos.ep == NO_SQ && pos.side == BLACK;
+        pos.unmake_null(u);
+        check(ok && pos.fen() == fen && pos.hash == pos.compute_hash(), "null move keeps the hash right and undoes cleanly");
+    }
 
     std::cout << "\nMates\n";
     struct Puzzle { const char* fen; int moves; std::vector<std::string> solutions; };

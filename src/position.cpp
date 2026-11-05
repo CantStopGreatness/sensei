@@ -228,6 +228,23 @@ void Position::make_move(Move m, Undo& u) {
     side = !side;
 }
 
+void Position::make_null(Undo& u) {
+    u = {NO_PIECE, castling, ep, halfmove};
+    history.push_back(hash);
+    hash ^= ZOBRIST.ep[ep] ^ ZOBRIST.ep[NO_SQ] ^ ZOBRIST.side;
+    ep = NO_SQ;
+    halfmove = 0;  // repetition checks must not look back past a null move
+    side = !side;
+}
+
+void Position::unmake_null(const Undo& u) {
+    side = !side;
+    ep = u.ep;
+    halfmove = u.halfmove;
+    hash = history.back();
+    history.pop_back();
+}
+
 void Position::unmake_move(Move m, const Undo& u) {
     side = !side;
     if (side == BLACK) fullmove--;
