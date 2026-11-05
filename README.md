@@ -19,6 +19,8 @@ Run `./build/sensei` with no arguments for UCI mode, and point Cute Chess, Arena
 ./build/sensei divide <depth> [fen]  # perft split by root move
 ```
 
+To play it in a browser: `python3 tools/play.py`, then open http://localhost:8765.
+
 ## Tests
 
 ```bash
