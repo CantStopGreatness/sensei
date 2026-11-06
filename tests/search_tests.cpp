@@ -1,9 +1,12 @@
 // Milestone 3 checks: hashing, repetition, mates, not hanging pieces, search speed.
 // Mate puzzles and their solution sets were verified independently with python-chess.
+#include "eval.h"
 #include "movegen.h"
 #include "search.h"
 #include <algorithm>
+#include <cctype>
 #include <chrono>
+#include <functional>
 #include <iostream>
 #include <sstream>
 #include <vector>
@@ -19,6 +22,27 @@ static Position from_fen(const std::string& fen) {
     Position pos;
     if (!pos.set_fen(fen)) std::cout << "  bad test FEN " << fen << '\n';
     return pos;
+}
+
+// The same position with colours swapped and the board flipped top to bottom.
+static std::string mirror_fen(const std::string& fen) {
+    std::istringstream in(fen);
+    std::string board, side, castle, ep, rest;
+    in >> board >> side >> castle >> ep;
+    std::getline(in, rest);
+    std::vector<std::string> ranks;
+    std::stringstream bs(board);
+    for (std::string r; std::getline(bs, r, '/');) ranks.push_back(r);
+    std::string out;
+    for (int i = int(ranks.size()) - 1; i >= 0; i--) out += ranks[i] + (i ? "/" : "");
+    auto swap_case = [](std::string s) {
+        for (char& c : s) c = std::isupper(c) ? char(std::tolower(c)) : char(std::toupper(c));
+        return s;
+    };
+    std::string c = swap_case(castle), cs;
+    for (char k : std::string("KQkq")) if (c.find(k) != std::string::npos) cs += k;
+    if (ep != "-") ep[1] = ep[1] == '3' ? '6' : '3';
+    return swap_case(out) + (side == "w" ? " b " : " w ") + (cs.empty() ? "-" : cs) + " " + ep + rest;
 }
 
 static void play(Position& pos, const std::vector<std::string>& moves) {
@@ -112,6 +136,75 @@ int main() {
     {
         Position pos = from_fen("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1");
         check(run(pos, 3).best == 0, "stalemate: no move, no crash");
+    }
+
+    std::cout << "\nCaptures-only generation\n";
+    {
+        // Must equal the full legal list filtered to captures and promotions, at every node.
+        bool ok = true;
+        std::string where;
+        std::function<void(Position&, int)> walk = [&](Position& pos, int depth) {
+            MoveList all, caps;
+            generate_legal(pos, all);
+            generate_legal(pos, caps, true);
+            std::vector<Move> want, got(caps.begin(), caps.end());
+            for (Move m : all) if (is_capture(m) || is_promo(m)) want.push_back(m);
+            std::sort(want.begin(), want.end());
+            std::sort(got.begin(), got.end());
+            if (want != got && ok) ok = false, where = pos.fen();
+            if (depth == 0) return;
+            for (Move m : all) {
+                Undo u;
+                pos.make_move(m, u);
+                walk(pos, depth - 1);
+                pos.unmake_move(m, u);
+            }
+        };
+        for (const char* fen : {"r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+                                "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1",
+                                "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1"}) {
+            Position pos = from_fen(fen);
+            walk(pos, 3);
+        }
+        check(ok, "captures-only list matches filtered legal moves at every node" + (ok ? "" : " (differs at " + where + ")"));
+    }
+
+    std::cout << "\nEvaluation\n";
+    for (const char* fen : {START_FEN, "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+                            "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1",
+                            "8/5pk1/6p1/1P6/8/4B1P1/5PK1/8 w - - 0 1",
+                            "r1bq1rk1/ppp2ppp/2n2n2/3pp1B1/1bPP4/2N1PN2/PP3PPP/R2QKB1R w KQ - 0 7",
+                            "r4rk1/pp3ppp/2p5/4q3/3n4/2NB1Q2/PPP2PPP/R4RK1 w - - 0 1"}) {
+        Position a = from_fen(fen), b = from_fen(mirror_fen(fen));
+        check(evaluate(a) == evaluate(b), std::string("colour-flipped position scores the same: ") + fen);
+    }
+    {
+        // Same material; White's b-pawn is passed and far advanced, so White should be clearly better.
+        Position pos = from_fen("8/5pk1/1P4p1/8/8/6P1/5PK1/8 w - - 0 1");
+        check(evaluate(pos) > 80, "advanced passed pawn is worth a lot in the endgame: " + std::to_string(evaluate(pos)));
+    }
+
+    std::cout << "\nStatic exchange evaluation\n";
+    {
+        // From the Chess Programming Wiki SEE page, rescored with Sensei's piece values.
+        struct SeeCase { const char* fen; const char* move; int expected; };
+        const std::vector<SeeCase> cases = {
+            {"1k1r4/1pp4p/p7/4p3/8/P5P1/1PP4P/2K1R3 w - - 0 1", "e1e5", 100},                // free pawn
+            {"1k1r3q/1ppn3p/p4b2/4p3/8/P2N2P1/1PP1R1BP/2K1Q3 w - - 0 1", "d3e5", 100 - 320},  // N for P
+            {"4k3/8/8/3p4/4P3/8/8/4K3 w - - 0 1", "e4d5", 100},                              // pawn trade
+            {"4k3/8/2p5/3p4/4P3/8/8/4K3 w - - 0 1", "e4d5", 0},                              // P x P, P x P
+            {"4k3/8/2p5/3r4/4P3/8/8/4K3 w - - 0 1", "e4d5", 500 - 100},                      // P takes R
+            {"4k3/8/2p5/3n4/8/8/3R4/3RK3 w - - 0 1", "d2d5", 320 - 500 + 100},               // R x N, P x R, R x P
+        };
+        for (const auto& c : cases) {
+            Position pos = from_fen(c.fen);
+            MoveList list;
+            generate_legal(pos, list);
+            auto it = std::find_if(list.begin(), list.end(), [&](Move m) { return move_to_uci(m) == c.move; });
+            int got = it == list.end() ? -99999 : see(pos, *it);
+            check(got == c.expected, std::string(c.move) + " in " + c.fen + ": " + std::to_string(got) +
+                                         ", expected " + std::to_string(c.expected));
+        }
     }
 
     std::cout << "\nMaterial\n";

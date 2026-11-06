@@ -16,18 +16,20 @@ static void add_targets(MoveList& list, int from, Bitboard targets, Bitboard ene
     }
 }
 
-void generate_pseudo_legal(const Position& pos, MoveList& list) {
+void generate_pseudo_legal(const Position& pos, MoveList& list, bool captures_only) {
     Color us = pos.side, them = !us;
     Bitboard own = pos.occ[us], enemy = pos.occ[them], all = pos.all();
+    Bitboard targets = captures_only ? enemy : ~own;
 
     // Pawns
     int up = us == WHITE ? 8 : -8;
     Bitboard start_rank = us == WHITE ? RANK_1 << 8 : RANK_1 << 48;
     for (Bitboard b = pos.pieces[make_piece(us, PAWN)]; b;) {
         int from = pop_lsb(b), to = from + up;
-        if (!(all & sq_bb(to))) {
+        bool promotes = sq_bb(to) & (RANK_1 | RANK_8);
+        if (!(all & sq_bb(to)) && (!captures_only || promotes)) {
             add_pawn_move(list, from, to, false);
-            if ((sq_bb(from) & start_rank) && !(all & sq_bb(to + up)))
+            if (!captures_only && (sq_bb(from) & start_rank) && !(all & sq_bb(to + up)))
                 list.add(make_move(from, to + up, DOUBLE_PUSH));
         }
         for (Bitboard caps = PAWN_ATTACKS[us][from] & enemy; caps;)
@@ -39,18 +41,19 @@ void generate_pseudo_legal(const Position& pos, MoveList& list) {
     // Pieces
     for (Bitboard b = pos.pieces[make_piece(us, KNIGHT)]; b;) {
         int from = pop_lsb(b);
-        add_targets(list, from, KNIGHT_ATTACKS[from] & ~own, enemy);
+        add_targets(list, from, KNIGHT_ATTACKS[from] & targets, enemy);
     }
     for (Bitboard b = pos.pieces[make_piece(us, BISHOP)] | pos.pieces[make_piece(us, QUEEN)]; b;) {
         int from = pop_lsb(b);
-        add_targets(list, from, bishop_attacks(from, all) & ~own, enemy);
+        add_targets(list, from, bishop_attacks(from, all) & targets, enemy);
     }
     for (Bitboard b = pos.pieces[make_piece(us, ROOK)] | pos.pieces[make_piece(us, QUEEN)]; b;) {
         int from = pop_lsb(b);
-        add_targets(list, from, rook_attacks(from, all) & ~own, enemy);
+        add_targets(list, from, rook_attacks(from, all) & targets, enemy);
     }
     int ksq = pos.king_sq(us);
-    add_targets(list, ksq, KING_ATTACKS[ksq] & ~own, enemy);
+    add_targets(list, ksq, KING_ATTACKS[ksq] & targets, enemy);
+    if (captures_only) return;
 
     // Castling: path empty, king not in check and doesn't pass through an attacked
     // square. The landing square is checked by the legality filter.
@@ -65,9 +68,9 @@ void generate_pseudo_legal(const Position& pos, MoveList& list) {
 }
 
 // ponytail: legality by make/test/unmake; pin + check-mask generation is faster if nps matters.
-void generate_legal(Position& pos, MoveList& list) {
+void generate_legal(Position& pos, MoveList& list, bool captures_only) {
     MoveList pseudo;
-    generate_pseudo_legal(pos, pseudo);
+    generate_pseudo_legal(pos, pseudo, captures_only);
     Color us = pos.side;
     for (Move m : pseudo) {
         Undo u;

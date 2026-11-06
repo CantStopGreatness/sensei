@@ -8,6 +8,46 @@
 #include <cstdlib>
 #include <sstream>
 
+int see(const Position& pos, Move m) {
+    int from = from_sq(m), to = to_sq(m);
+    Color side = color_of(pos.board[from]);
+    Bitboard occ = pos.all() ^ sq_bb(from);
+    int gain[32];
+    if (flags_of(m) == EP_CAPTURE) {
+        gain[0] = PIECE_VALUE[PAWN];
+        occ ^= sq_bb(to + (side == WHITE ? -8 : 8));
+    } else {
+        gain[0] = pos.board[to] == NO_PIECE ? 0 : PIECE_VALUE[type_of(pos.board[to])];
+    }
+    PieceType on_square = type_of(pos.board[from]);
+    const Bitboard* P = pos.pieces;
+    Bitboard diag = P[WB] | P[BB] | P[WQ] | P[BQ], straight = P[WR] | P[BR] | P[WQ] | P[BQ];
+    Bitboard attackers = (PAWN_ATTACKS[BLACK][to] & P[WP]) | (PAWN_ATTACKS[WHITE][to] & P[BP]) |
+                         (KNIGHT_ATTACKS[to] & (P[WN] | P[BN])) | (KING_ATTACKS[to] & (P[WK] | P[BK])) |
+                         (bishop_attacks(to, occ) & diag) | (rook_attacks(to, occ) & straight);
+    int d = 0;
+    for (side = !side;; side = !side) {
+        attackers &= occ;
+        Bitboard ours = attackers & pos.occ[side];
+        if (!ours) break;
+        int t = PAWN;
+        Bitboard bb = 0;
+        for (; t <= KING; t++)
+            if ((bb = ours & P[make_piece(side, PieceType(t))])) break;
+        if (t == KING && (attackers & pos.occ[!side])) break;  // the king can't take a defended piece
+        d++;
+        gain[d] = PIECE_VALUE[on_square] - gain[d - 1];
+        on_square = PieceType(t);
+        occ ^= sq_bb(lsb(bb));
+        attackers |= (bishop_attacks(to, occ) & diag) | (rook_attacks(to, occ) & straight);  // x-rays
+    }
+    while (d) {
+        gain[d - 1] = -std::max(-gain[d - 1], gain[d]);
+        d--;
+    }
+    return gain[0];
+}
+
 namespace {
 
 using Clock = std::chrono::steady_clock;
@@ -22,6 +62,7 @@ const struct LmrTable {
     }
     const int* operator[](int d) const { return t[d]; }
 } LMR;
+
 
 struct Searcher {
     Position& pos;
@@ -54,7 +95,9 @@ struct Searcher {
         if (is_capture(m)) {
             int victim = flags_of(m) == EP_CAPTURE ? PAWN : type_of(pos.board[to_sq(m)]);
             int attacker = type_of(pos.board[from_sq(m)]);
-            return 100000 + 10 * PIECE_VALUE[victim] - PIECE_VALUE[attacker] + (is_promo(m) ? 900 : 0);
+            int mvv_lva = 10 * PIECE_VALUE[victim] - PIECE_VALUE[attacker] + (is_promo(m) ? 900 : 0);
+            // Captures that lose material go after the quiet moves.
+            return (is_promo(m) || see(pos, m) >= 0 ? 100000 : -100000) + mvv_lva;
         }
         if (is_promo(m)) return 95000 + PIECE_VALUE[promo_type(m)];
         if (m == killers[ply][0]) return 90000;
@@ -88,13 +131,13 @@ struct Searcher {
             if (best > alpha) alpha = best;
         }
 
-        // ponytail: generates all legal moves then filters; a captures-only generator is faster.
         MoveList list;
-        generate_legal(pos, list);
+        generate_legal(pos, list, !in_check);  // in check, every evasion counts
         if (in_check && list.size == 0) return -MATE + ply;
         order(list, ply);
         for (Move m : list) {
             if (!in_check && !is_capture(m) && !(is_promo(m) && promo_type(m) == QUEEN)) continue;
+            if (!in_check && !is_promo(m) && see(pos, m) < 0) continue;  // losing capture
             Undo u;
             pos.make_move(m, u);
             int score = -quiescence(-beta, -alpha, ply + 1);
@@ -129,12 +172,20 @@ struct Searcher {
                 return score;
         }
 
+        bool pv_node = beta - alpha > 1;
+        int static_eval = in_check ? -MATE : evaluate(pos);
+        bool no_mates = std::abs(alpha) < MATE - MAX_PLY && std::abs(beta) < MATE - MAX_PLY;
+
+        // Reverse futility pruning: so far above beta that a shallow search won't bring it back.
+        if (!pv_node && !in_check && ply > 0 && depth <= 6 && no_mates && static_eval - 80 * depth >= beta)
+            return static_eval;
+
         // Null-move pruning: if passing still leaves us >= beta after a shallower search,
         // a real move will too. Unsound in zugzwang, so skip with only king and pawns.
         Color us = pos.side;
         bool has_pieces = pos.occ[us] & ~(pos.pieces[make_piece(us, PAWN)] | pos.pieces[make_piece(us, KING)]);
         if (allow_null && ply > 0 && !in_check && depth >= 3 && has_pieces && beta < MATE - MAX_PLY &&
-            evaluate(pos) >= beta) {
+            static_eval >= beta) {
             int r = depth > 6 ? 3 : 2;
             Undo u;
             pos.make_null(u);
@@ -149,6 +200,9 @@ struct Searcher {
         if (list.size == 0) return in_check ? -MATE + ply : 0;  // checkmate or stalemate
         order(list, ply, hash_move);
 
+        // Futility pruning: near the leaves, quiet moves can't lift a hopeless static eval to alpha.
+        bool futile = !pv_node && !in_check && depth <= 2 && no_mates && static_eval + 120 * depth <= alpha;
+
         int alpha_orig = alpha, best = -MATE;
         Move best_move = 0;
         for (int i = 0; i < list.size; i++) {
@@ -156,6 +210,10 @@ struct Searcher {
             bool quiet = !is_capture(m) && !is_promo(m);
             Undo u;
             pos.make_move(m, u);
+            if (futile && i > 0 && quiet && !pos.in_check()) {
+                pos.unmake_move(m, u);
+                continue;
+            }
             int score;
             if (i == 0) {
                 score = -negamax(depth - 1, -beta, -alpha, ply + 1);
@@ -214,12 +272,26 @@ std::string score_string(int score) {
 SearchResult search(Position& pos, const SearchLimits& limits, const std::atomic<bool>& stop, std::ostream& out) {
     Searcher s{pos, stop, Clock::now(), limits.time_ms};
     SearchResult result;
+    int stable = 0;  // iterations in a row the best move hasn't changed
 
     for (int depth = 1; depth <= limits.depth; depth++) {
         s.can_abort = depth > 1;
-        int score = s.negamax(depth, -MATE - 1, MATE + 1, 0);
+        // Aspiration window: expect a score near the last one; widen and re-search on a miss.
+        int score, delta = 25;
+        int alpha = -MATE - 1, beta = MATE + 1;
+        if (depth >= 5 && std::abs(result.score) < MATE - MAX_PLY)
+            alpha = result.score - delta, beta = result.score + delta;
+        while (true) {
+            score = s.negamax(depth, alpha, beta, 0);
+            if (s.aborted) break;
+            if (score <= alpha) alpha = std::max(score - delta, -MATE - 1);
+            else if (score >= beta) beta = std::min(score + delta, MATE + 1);
+            else break;
+            delta *= 2;
+        }
         if (s.aborted) break;  // partial iteration: keep the last complete one
         if (s.pv_len[0] == 0) break;  // no legal moves
+        stable = s.pv[0][0] == result.best ? stable + 1 : 0;
         result = {s.pv[0][0], score, depth, s.nodes};
         s.root_best = result.best;
 
@@ -233,8 +305,14 @@ SearchResult search(Position& pos, const SearchLimits& limits, const std::atomic
         // Stop on a mate only once the full-width search covers it: then no shorter mate exists.
         // (A warm TT or check extensions can show a longer mate at a shallower depth.)
         if (MATE - std::abs(score) <= depth) break;
-        // The next depth takes several times longer than this one; don't start what can't finish.
-        if (limits.time_ms >= 0 && ms * 2 > limits.time_ms) break;
+        // The next depth takes about twice as long as everything so far; don't start what can't
+        // finish by the target. Spend longer while the best move keeps changing, less once it's settled.
+        if (limits.soft_ms >= 0) {
+            double factor = stable == 0 ? 1.5 : stable >= 4 ? 0.6 : 1.0;
+            if (ms * 2 > limits.soft_ms * factor) break;
+        } else if (limits.time_ms >= 0 && ms * 2 > limits.time_ms) {
+            break;
+        }
     }
     result.nodes = s.nodes;
     return result;
