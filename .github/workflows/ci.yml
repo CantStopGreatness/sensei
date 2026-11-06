@@ -25,3 +25,5 @@ jobs:
         run: |
           pip install chess
           python3 tests/selfplay.py --games 20 --vs-random
+      - name: Pondering over UCI (go ponder, ponderhit, stop)
+        run: python3 tests/ponder_test.py
