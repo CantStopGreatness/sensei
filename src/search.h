@@ -11,6 +11,9 @@ struct SearchLimits {
     int depth = MAX_PLY - 1;
     int64_t time_ms = -1;  // hard limit for this move: abort the search here; -1 = no limit
     int64_t soft_ms = -1;  // target time: don't start a depth that likely can't finish by then
+    // While *pondering is true the time limits are ignored; when it turns false (UCI "ponderhit")
+    // the clock starts and the limits apply from that moment. nullptr = not a ponder search.
+    const std::atomic<bool>* pondering = nullptr;
 };
 
 struct SearchResult {
@@ -18,6 +21,7 @@ struct SearchResult {
     int score = 0;
     int depth = 0;
     uint64_t nodes = 0;
+    Move ponder = 0;  // expected reply, second move of the PV; 0 if unknown
 };
 
 // Static exchange evaluation of a capture, in centipawns for the side making it: material won
