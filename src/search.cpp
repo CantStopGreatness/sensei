@@ -3,6 +3,7 @@
 #include "movegen.h"
 #include "tt.h"
 #include "uci.h"
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -326,6 +327,18 @@ SearchResult search(Position& pos, const SearchLimits& limits, const std::atomic
         } else if (limits.time_ms >= 0 && ms * 2 > limits.time_ms) {
             break;
         }
+    }
+    // A TT cutoff right after the root leaves a one-move PV; take the expected reply from the
+    // TT instead, so there's still something to ponder on.
+    if (result.best && !result.ponder) {
+        Undo u;
+        pos.make_move(result.best, u);
+        if (const TTEntry* e = TT.probe(pos.hash)) {
+            MoveList list;
+            generate_legal(pos, list);
+            if (std::find(list.begin(), list.end(), e->move) != list.end()) result.ponder = e->move;
+        }
+        pos.unmake_move(result.best, u);
     }
     result.nodes = s.nodes;
     return result;
