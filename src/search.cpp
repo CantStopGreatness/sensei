@@ -288,6 +288,7 @@ SearchResult search(Position& pos, const SearchLimits& limits, const std::atomic
     // Lazy SMP: helper threads search the same position on private copies, sharing only the TT.
     // They print nothing and stop when the main search does; what they add is TT entries the
     // main thread finds ready. Odd helpers start one ply deeper so the threads spread out.
+    TT.new_search();
     std::atomic<bool> helpers_stop{false};
     std::vector<std::thread> helpers;
     for (int id = 1; id < limits.threads; id++) {
