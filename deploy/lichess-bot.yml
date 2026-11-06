@@ -12,7 +12,7 @@ engine:
   dir: "../sensei-release/build/"
   name: "sensei"
   protocol: "uci"
-  ponder: false            # Sensei doesn't support pondering yet
+  ponder: true             # think on the opponent's time
   uci_options:
     Hash: 64
 

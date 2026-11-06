@@ -11,7 +11,7 @@ cmake --build build
 
 ## Use
 
-Run `./build/sensei` with no arguments for UCI mode, and point Cute Chess, Arena or lichess-bot at that binary. It supports `uci`, `isready`, `ucinewgame`, `position startpos|fen ... [moves ...]`, `go`, `stop`, `quit`, plus `d` to print the board.
+Run `./build/sensei` with no arguments for UCI mode, and point Cute Chess, Arena or lichess-bot at that binary. It supports `uci`, `isready`, `ucinewgame`, `position startpos|fen ... [moves ...]`, `go` (including `go ponder`), `ponderhit`, `stop`, `quit`, plus `d` to print the board.
 
 ```bash
 ./build/sensei print [fen]           # pretty-print a position
@@ -30,6 +30,7 @@ To play it in a browser: `python3 tools/play.py`, then open http://localhost:876
 pip install chess
 python3 tests/selfplay.py --games 100              # self-play over UCI, every move checked by python-chess
 python3 tests/selfplay.py --games 100 --vs-random  # must beat a random mover every game
+python3 tests/ponder_test.py                       # go ponder / ponderhit / stop over UCI, with real timing
 python3 tests/match.py NEW OLD --games 200 --tc 5+0.05  # match two builds: Elo +/- error and SPRT
 ```
 

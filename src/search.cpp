@@ -3,6 +3,7 @@
 #include "movegen.h"
 #include "tt.h"
 #include "uci.h"
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -69,6 +70,8 @@ struct Searcher {
     const std::atomic<bool>& stop_flag;
     Clock::time_point start;
     int64_t time_ms;
+    const std::atomic<bool>* pondering;
+    bool ponder_active = pondering && *pondering;  // time limits are off until ponderhit
     bool aborted = false;
     bool can_abort = false;  // false during depth 1 so there is always a move
     uint64_t nodes = 0;
@@ -82,10 +85,19 @@ struct Searcher {
         return std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - start).count();
     }
 
+    // On ponderhit the opponent played the expected move: start the clock now.
+    void check_ponderhit() {
+        if (ponder_active && !*pondering) {
+            ponder_active = false;
+            start = Clock::now();
+        }
+    }
+
     bool should_stop() {
         if (aborted) return true;
         if (!can_abort || (nodes & 2047)) return false;
-        aborted = stop_flag || (time_ms >= 0 && elapsed_ms() >= time_ms);
+        check_ponderhit();
+        aborted = stop_flag || (!ponder_active && time_ms >= 0 && elapsed_ms() >= time_ms);
         return aborted;
     }
 
@@ -270,7 +282,7 @@ std::string score_string(int score) {
 }  // namespace
 
 SearchResult search(Position& pos, const SearchLimits& limits, const std::atomic<bool>& stop, std::ostream& out) {
-    Searcher s{pos, stop, Clock::now(), limits.time_ms};
+    Searcher s{pos, stop, Clock::now(), limits.time_ms, limits.pondering};
     SearchResult result;
     int stable = 0;  // iterations in a row the best move hasn't changed
 
@@ -292,7 +304,7 @@ SearchResult search(Position& pos, const SearchLimits& limits, const std::atomic
         if (s.aborted) break;  // partial iteration: keep the last complete one
         if (s.pv_len[0] == 0) break;  // no legal moves
         stable = s.pv[0][0] == result.best ? stable + 1 : 0;
-        result = {s.pv[0][0], score, depth, s.nodes};
+        result = {s.pv[0][0], score, depth, s.nodes, s.pv_len[0] >= 2 ? s.pv[0][1] : Move(0)};
         s.root_best = result.best;
 
         int64_t ms = s.elapsed_ms();
@@ -305,6 +317,8 @@ SearchResult search(Position& pos, const SearchLimits& limits, const std::atomic
         // Stop on a mate only once the full-width search covers it: then no shorter mate exists.
         // (A warm TT or check extensions can show a longer mate at a shallower depth.)
         if (MATE - std::abs(score) <= depth) break;
+        s.check_ponderhit();
+        if (s.ponder_active) continue;  // no clock yet: keep deepening until ponderhit or stop
         // The next depth takes about twice as long as everything so far; don't start what can't
         // finish by the target. Spend longer while the best move keeps changing, less once it's settled.
         if (limits.soft_ms >= 0) {
@@ -313,6 +327,18 @@ SearchResult search(Position& pos, const SearchLimits& limits, const std::atomic
         } else if (limits.time_ms >= 0 && ms * 2 > limits.time_ms) {
             break;
         }
+    }
+    // A TT cutoff right after the root leaves a one-move PV; take the expected reply from the
+    // TT instead, so there's still something to ponder on.
+    if (result.best && !result.ponder) {
+        Undo u;
+        pos.make_move(result.best, u);
+        if (const TTEntry* e = TT.probe(pos.hash)) {
+            MoveList list;
+            generate_legal(pos, list);
+            if (std::find(list.begin(), list.end(), e->move) != list.end()) result.ponder = e->move;
+        }
+        pos.unmake_move(result.best, u);
     }
     result.nodes = s.nodes;
     return result;

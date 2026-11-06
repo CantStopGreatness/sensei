@@ -60,13 +60,14 @@ static void set_position(Position& pos, std::istringstream& ss, std::ostream& ou
 // Turns "go" arguments into search limits. With a clock, the target (soft) time is
 // remaining / 25 + 3/4 of the increment; the search may run to 4x that (hard), but never
 // past a third of the remaining time.
-static SearchLimits parse_go(std::istringstream& ss, Color side, bool& infinite) {
+static SearchLimits parse_go(std::istringstream& ss, Color side, bool& infinite, bool& ponder) {
     SearchLimits limits;
     int64_t time[2] = {-1, -1}, inc[2] = {0, 0}, movetime = -1;
     int movestogo = 0;
-    infinite = false;
+    infinite = ponder = false;
     for (std::string t; ss >> t;) {
         if (t == "infinite") infinite = true;
+        else if (t == "ponder") ponder = true;
         else if (t == "depth") ss >> limits.depth;
         else if (t == "movetime") ss >> movetime;
         else if (t == "wtime") ss >> time[WHITE];
@@ -93,6 +94,7 @@ void uci_loop(std::istream& in, std::ostream& out) {
     Position pos;
     pos.set_fen(START_FEN);
     std::atomic<bool> stop{false};
+    std::atomic<bool> pondering{false};  // between "go ponder" and "ponderhit"
     std::thread searcher;
     auto finish_search = [&] {
         stop = true;
@@ -106,7 +108,8 @@ void uci_loop(std::istream& in, std::ostream& out) {
 
         if (cmd == "uci") {
             say(out, "id name Sensei\nid author Aryan Thakur\n"
-                     "option name Hash type spin default 16 min 1 max 1024\nuciok");
+                     "option name Hash type spin default 16 min 1 max 1024\n"
+                     "option name Ponder type check default false\nuciok");
         } else if (cmd == "isready") {
             say(out, "readyok");
         } else if (cmd == "ucinewgame") {
@@ -125,15 +128,21 @@ void uci_loop(std::istream& in, std::ostream& out) {
             set_position(pos, ss, out);
         } else if (cmd == "go") {
             finish_search();
-            bool infinite;
-            SearchLimits limits = parse_go(ss, pos.side, infinite);
+            bool infinite, ponder;
+            SearchLimits limits = parse_go(ss, pos.side, infinite, ponder);
             stop = false;
-            searcher = std::thread([&out, &stop, limits, infinite, p = pos]() mutable {
+            pondering = ponder;
+            if (ponder) limits.pondering = &pondering;
+            searcher = std::thread([&out, &stop, &pondering, limits, infinite, p = pos]() mutable {
                 SearchResult r = search(p, limits, stop, out);
-                // UCI: after "go infinite", bestmove waits for "stop".
-                while (infinite && !stop) std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                say(out, "bestmove " + (r.best ? move_to_uci(r.best) : "0000"));
+                // UCI: after "go infinite", and while pondering, bestmove waits for "stop" or "ponderhit".
+                while ((infinite || pondering) && !stop) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                std::string line = "bestmove " + (r.best ? move_to_uci(r.best) : "0000");
+                if (r.best && r.ponder) line += " ponder " + move_to_uci(r.ponder);
+                say(out, line);
             });
+        } else if (cmd == "ponderhit") {
+            pondering = false;  // the search keeps going, now on the clock
         } else if (cmd == "stop") {
             finish_search();
         } else if (cmd == "d") {
