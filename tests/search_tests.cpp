@@ -147,11 +147,12 @@ int main() {
             MoveList all, caps;
             generate_legal(pos, all);
             generate_legal(pos, caps, true);
-            std::vector<Move> want, got(caps.begin(), caps.end());
-            for (Move m : all) if (is_capture(m) || is_promo(m)) want.push_back(m);
-            std::sort(want.begin(), want.end());
-            std::sort(got.begin(), got.end());
-            if (want != got && ok) ok = false, where = pos.fen();
+            MoveList want;
+            for (Move m : all) if (is_capture(m) || is_promo(m)) want.add(m);
+            std::sort(want.moves, want.moves + want.size);
+            std::sort(caps.moves, caps.moves + caps.size);
+            bool same = want.size == caps.size && std::equal(want.begin(), want.end(), caps.begin());
+            if (!same && ok) ok = false, where = pos.fen();
             if (depth == 0) return;
             for (Move m : all) {
                 Undo u;
