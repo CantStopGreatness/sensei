@@ -33,6 +33,8 @@ python3 tests/selfplay.py --games 100 --vs-random  # must beat a random mover ev
 python3 tests/match.py NEW OLD --games 200 --tc 5+0.05  # match two builds: Elo +/- error and SPRT
 ```
 
+CI (`.github/workflows/ci.yml`) runs the perft and search tests and 20 games against a random mover on Linux and macOS for every pull request and every push to `main`.
+
 Perft numbers come from the [Chess Programming Wiki](https://www.chessprogramming.org/Perft_Results). All match, including start position depth 6 (119,060,324) and Kiwipete depth 5 (193,690,690).
 
 ## Running on Lichess
