@@ -51,11 +51,28 @@ Sensei plays through [lichess-bot](https://github.com/lichess-bot-devs/lichess-b
    export LICHESS_BOT_TOKEN=lip_...
    ```
 4. Upgrade the account to a bot. **This can't be undone**, and the bot starts playing right after: `python3 lichess-bot.py -u`
-5. From then on, start it with `python3 lichess-bot.py`.
+5. From then on, start it with `python3 lichess-bot.py`, or on macOS let launchd run it (below).
 
 The config uses the Lichess masters database as an opening book and Lichess's online tablebases for endgames with 7 or fewer pieces.
 
-To put a new version on Lichess after merging to `main`: `cd ~/sensei-release && git pull && cmake --build build --target sensei`, then restart lichess-bot.
+### Keeping it running (macOS)
+
+lichess-bot exits if a restart fails, for example when the network drops, and stays down. `deploy/launchd/` makes launchd start it at login and restart it whenever it exits, at most once a minute so Lichess doesn't rate-limit the reconnects. The token lives in a file only you can read, not in your shell config:
+
+```bash
+mkdir -p ~/.config/lichess-bot
+read -rs TOKEN && (umask 077; printf '%s' "$TOKEN" > ~/.config/lichess-bot/token) && unset TOKEN  # paste the token, then Enter
+cp ~/sensei-release/deploy/launchd/run.sh ~/.config/lichess-bot/ && chmod 700 ~/.config/lichess-bot/run.sh
+sed "s#__HOME__#$HOME#g" ~/sensei-release/deploy/launchd/com.aryanthakur.sensei-lichess-bot.plist \
+  > ~/Library/LaunchAgents/com.aryanthakur.sensei-lichess-bot.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.aryanthakur.sensei-lichess-bot.plist
+```
+
+Logs go to `~/lichess-bot/bot.log`. Restart with `launchctl kickstart -k gui/$(id -u)/com.aryanthakur.sensei-lichess-bot`, and stop with `launchctl bootout gui/$(id -u)/com.aryanthakur.sensei-lichess-bot`. Don't also start lichess-bot by hand: two copies on one token get rate-limited. The bot is offline while the Mac sleeps and reconnects when it wakes.
+
+### Deploying a new version
+
+After merging to `main`: `cd ~/sensei-release && git pull && cmake --build build --target sensei`, then restart lichess-bot (the `kickstart` command above).
 
 ## Results
 
