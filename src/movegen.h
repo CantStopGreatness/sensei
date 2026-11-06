@@ -9,7 +9,8 @@ struct MoveList {
     const Move* end() const { return moves + size; }
 };
 
-// Every move that obeys piece movement; may leave own king in check.
-void generate_pseudo_legal(const Position& pos, MoveList& list);
+// Every move that obeys piece movement; may leave own king in check. With captures_only, just
+// captures (en passant included) and promotions, for quiescence search.
+void generate_pseudo_legal(const Position& pos, MoveList& list, bool captures_only = false);
 // Only moves that don't leave own king in check. Position is restored on return.
-void generate_legal(Position& pos, MoveList& list);
+void generate_legal(Position& pos, MoveList& list, bool captures_only = false);

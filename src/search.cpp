@@ -131,9 +131,8 @@ struct Searcher {
             if (best > alpha) alpha = best;
         }
 
-        // ponytail: generates all legal moves then filters; a captures-only generator is faster.
         MoveList list;
-        generate_legal(pos, list);
+        generate_legal(pos, list, !in_check);  // in check, every evasion counts
         if (in_check && list.size == 0) return -MATE + ply;
         order(list, ply);
         for (Move m : list) {
@@ -277,7 +276,19 @@ SearchResult search(Position& pos, const SearchLimits& limits, const std::atomic
 
     for (int depth = 1; depth <= limits.depth; depth++) {
         s.can_abort = depth > 1;
-        int score = s.negamax(depth, -MATE - 1, MATE + 1, 0);
+        // Aspiration window: expect a score near the last one; widen and re-search on a miss.
+        int score, delta = 25;
+        int alpha = -MATE - 1, beta = MATE + 1;
+        if (depth >= 5 && std::abs(result.score) < MATE - MAX_PLY)
+            alpha = result.score - delta, beta = result.score + delta;
+        while (true) {
+            score = s.negamax(depth, alpha, beta, 0);
+            if (s.aborted) break;
+            if (score <= alpha) alpha = std::max(score - delta, -MATE - 1);
+            else if (score >= beta) beta = std::min(score + delta, MATE + 1);
+            else break;
+            delta *= 2;
+        }
         if (s.aborted) break;  // partial iteration: keep the last complete one
         if (s.pv_len[0] == 0) break;  // no legal moves
         stable = s.pv[0][0] == result.best ? stable + 1 : 0;

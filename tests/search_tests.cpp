@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <functional>
 #include <iostream>
 #include <sstream>
 #include <vector>
@@ -135,6 +136,37 @@ int main() {
     {
         Position pos = from_fen("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1");
         check(run(pos, 3).best == 0, "stalemate: no move, no crash");
+    }
+
+    std::cout << "\nCaptures-only generation\n";
+    {
+        // Must equal the full legal list filtered to captures and promotions, at every node.
+        bool ok = true;
+        std::string where;
+        std::function<void(Position&, int)> walk = [&](Position& pos, int depth) {
+            MoveList all, caps;
+            generate_legal(pos, all);
+            generate_legal(pos, caps, true);
+            std::vector<Move> want, got(caps.begin(), caps.end());
+            for (Move m : all) if (is_capture(m) || is_promo(m)) want.push_back(m);
+            std::sort(want.begin(), want.end());
+            std::sort(got.begin(), got.end());
+            if (want != got && ok) ok = false, where = pos.fen();
+            if (depth == 0) return;
+            for (Move m : all) {
+                Undo u;
+                pos.make_move(m, u);
+                walk(pos, depth - 1);
+                pos.unmake_move(m, u);
+            }
+        };
+        for (const char* fen : {"r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+                                "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1",
+                                "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1"}) {
+            Position pos = from_fen(fen);
+            walk(pos, 3);
+        }
+        check(ok, "captures-only list matches filtered legal moves at every node" + (ok ? "" : " (differs at " + where + ")"));
     }
 
     std::cout << "\nEvaluation\n";
