@@ -3,6 +3,7 @@
 #include "eval.h"
 #include "movegen.h"
 #include "search.h"
+#include "tt.h"
 #include <algorithm>
 #include <cctype>
 #include <chrono>
@@ -71,11 +72,12 @@ static bool hash_walk(Position& pos, int depth) {
     return pos.hash == pos.compute_hash();
 }
 
-static SearchResult run(Position& pos, int depth) {
+static SearchResult run(Position& pos, int depth, int threads = 1) {
     std::atomic<bool> stop{false};
     std::ostringstream sink;
     SearchLimits limits;
     limits.depth = depth;
+    limits.threads = threads;
     return search(pos, limits, stop, sink);
 }
 
@@ -118,13 +120,17 @@ int main() {
         {"r1b2k1r/ppp1bppp/8/1B1Q4/5q2/2P5/PPP2PPP/R3R1K1 w - - 1 1", 2, {"d5d8"}},
         {"2k5/8/1K6/8/8/8/8/7R w - - 0 1", 2, {"h1d1"}},
     };
-    for (const auto& p : mates) {
-        Position pos = from_fen(p.fen);
-        SearchResult r = run(pos, 2 * p.moves);
-        std::string best = move_to_uci(r.best);
-        bool found = std::find(p.solutions.begin(), p.solutions.end(), best) != p.solutions.end();
-        check(found && r.score == MATE - (2 * p.moves - 1),
-              "mate in " + std::to_string(p.moves) + ": played " + best + ", " + p.fen);
+    for (int threads : {1, 4}) {
+        for (const auto& p : mates) {
+            TT.clear();
+            Position pos = from_fen(p.fen);
+            SearchResult r = run(pos, 2 * p.moves, threads);
+            std::string best = move_to_uci(r.best);
+            bool found = std::find(p.solutions.begin(), p.solutions.end(), best) != p.solutions.end();
+            check(found && r.score == MATE - (2 * p.moves - 1),
+                  "mate in " + std::to_string(p.moves) + (threads > 1 ? ", 4 threads" : "") + ": played " + best +
+                      ", " + p.fen);
+        }
     }
     {
         // Second search with a warm TT used to stop at depth 1 on a stored mate in 4 (Qc5+).

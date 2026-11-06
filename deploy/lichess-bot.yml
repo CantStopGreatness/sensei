@@ -15,6 +15,7 @@ engine:
   ponder: true             # think on the opponent's time
   uci_options:
     Hash: 64
+    Threads: 4             # Lazy SMP; one game at a time, so most cores would idle otherwise
 
   # Moves fetched from Lichess instead of searched. Both need at least min_time seconds left.
   online_moves:
