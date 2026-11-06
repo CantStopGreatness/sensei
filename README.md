@@ -37,6 +37,15 @@ python3 tests/match.py NEW OLD --new-option Threads=4  # set UCI options per sid
 
 CI (`.github/workflows/ci.yml`) runs the perft and search tests and 20 games against a random mover on Linux and macOS for every pull request and every push to `main`.
 
+### Tuning the evaluation
+
+All evaluation weights live in `EvalParams` (`src/eval.h`). Texel tuning fits them to game results:
+
+```bash
+python3 tools/gen_data.py --games 6000 --out data/positions.txt  # quiet positions from self-play
+./build/tune data/positions.txt tuned.txt                         # fit the weights; prints the error as it goes
+```
+
 Perft numbers come from the [Chess Programming Wiki](https://www.chessprogramming.org/Perft_Results). All match, including start position depth 6 (119,060,324) and Kiwipete depth 5 (193,690,690).
 
 ## Running on Lichess
