@@ -66,3 +66,10 @@ To put a new version on Lichess after merging to `main`: `cd ~/sensei-release &&
 | v0.3 | Transposition table | +149 ± 47 (200 games, 5s+0.05s, SPRT [0,10] passed) |
 | v0.4 | Null-move pruning | +78 ± 26 (600 games, 5s+0.05s, SPRT [0,10] passed) |
 | v0.5 | History heuristic, late move reductions, PVS | +137 ± 33 (400 games, 5s+0.05s, SPRT [0,10] passed) |
+| v0.6 | Tapered eval, passed/doubled/isolated pawns, bishop pair, rooks on open files | +180 ± 36 (400 games, 5s+0.05s, SPRT [0,10] passed) |
+| v0.7 | Soft/hard time limits, best-move stability | +68 ± 25 (600 games, 5s+0.05s, SPRT [0,10] passed) |
+| v0.8 | SEE, reverse futility pruning, futility pruning | +152 ± 33 (400 games, 5s+0.05s, SPRT [0,10] passed) |
+| v0.9 | Mobility, king safety (pawn shelter, king attack) | +69 ± 26 (600 games, 5s+0.05s, SPRT [0,10] passed) |
+| v0.10 | Captures-only quiescence generation, aspiration windows | +70 ± 29 (400 games, 5s+0.05s, SPRT [0,10] passed) |
+
+v0.10 against v0.3 directly: +521 ± 109 (200 games, 5s+0.05s; 95.3% score). Gaps this lopsided compress, so the per-version gains don't simply add up.
