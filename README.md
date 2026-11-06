@@ -64,3 +64,5 @@ To put a new version on Lichess after merging to `main`: `cd ~/sensei-release &&
 | v0.1 | Random mover | — |
 | v0.2 | Material + PST eval, alpha-beta, quiescence, MVV-LVA + killers | Beats random 100/100 |
 | v0.3 | Transposition table | +149 ± 47 (200 games, 5s+0.05s, SPRT [0,10] passed) |
+| v0.4 | Null-move pruning | +78 ± 26 (600 games, 5s+0.05s, SPRT [0,10] passed) |
+| v0.5 | History heuristic, late move reductions, PVS | +137 ± 33 (400 games, 5s+0.05s, SPRT [0,10] passed) |

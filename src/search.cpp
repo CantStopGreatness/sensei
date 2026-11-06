@@ -4,12 +4,24 @@
 #include "tt.h"
 #include "uci.h"
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <sstream>
 
 namespace {
 
 using Clock = std::chrono::steady_clock;
+
+// Late-move reduction in plies, by [depth][move index]; grows with both.
+const struct LmrTable {
+    int t[64][64];
+    LmrTable() {
+        for (int d = 0; d < 64; d++)
+            for (int i = 0; i < 64; i++)
+                t[d][i] = d && i ? int(0.75 + std::log(d) * std::log(i) / 2.25) : 0;
+    }
+    const int* operator[](int d) const { return t[d]; }
+} LMR;
 
 struct Searcher {
     Position& pos;
@@ -21,6 +33,7 @@ struct Searcher {
     uint64_t nodes = 0;
     Move root_best = 0;      // best move of the previous iteration, searched first
     Move killers[MAX_PLY][2] = {};
+    int history[2][64][64] = {};     // [side][from][to]: quiet moves that caused cutoffs
     Move pv[MAX_PLY][MAX_PLY] = {};  // triangular PV table
     int pv_len[MAX_PLY] = {};
 
@@ -46,7 +59,7 @@ struct Searcher {
         if (is_promo(m)) return 95000 + PIECE_VALUE[promo_type(m)];
         if (m == killers[ply][0]) return 90000;
         if (m == killers[ply][1]) return 80000;
-        return 0;
+        return history[pos.side][from_sq(m)][to_sq(m)];  // kept below 80000 by aging
     }
 
     void order(MoveList& list, int ply, Move hash_move = 0) const {
@@ -138,10 +151,27 @@ struct Searcher {
 
         int alpha_orig = alpha, best = -MATE;
         Move best_move = 0;
-        for (Move m : list) {
+        for (int i = 0; i < list.size; i++) {
+            Move m = list.moves[i];
+            bool quiet = !is_capture(m) && !is_promo(m);
             Undo u;
             pos.make_move(m, u);
-            int score = -negamax(depth - 1, -beta, -alpha, ply + 1);
+            int score;
+            if (i == 0) {
+                score = -negamax(depth - 1, -beta, -alpha, ply + 1);
+            } else {
+                // PVS: later moves only need to prove they're no better than alpha (null window).
+                // LMR: late quiet moves are probably bad, so prove that at reduced depth first.
+                // Never at the root, and one ply less on the PV, where a miss costs the most.
+                int r = 0;
+                if (ply > 0 && depth >= 3 && i >= 3 && quiet && !in_check && !pos.in_check() &&
+                    m != killers[ply][0] && m != killers[ply][1])
+                    r = std::max(0, std::min(LMR[std::min(depth, 63)][std::min(i, 63)] - (beta - alpha > 1),
+                                             depth - 2));
+                score = -negamax(depth - 1 - r, -alpha - 1, -alpha, ply + 1);
+                if (score > alpha && r > 0) score = -negamax(depth - 1, -alpha - 1, -alpha, ply + 1);
+                if (score > alpha && score < beta) score = -negamax(depth - 1, -beta, -alpha, ply + 1);
+            }
             pos.unmake_move(m, u);
             if (aborted) return 0;
 
@@ -154,9 +184,15 @@ struct Searcher {
                 pv_len[ply] = pv_len[ply + 1] + 1;
             }
             if (alpha >= beta) {
-                if (!is_capture(m) && m != killers[ply][0]) {
-                    killers[ply][1] = killers[ply][0];
-                    killers[ply][0] = m;
+                if (quiet) {
+                    if (m != killers[ply][0]) {
+                        killers[ply][1] = killers[ply][0];
+                        killers[ply][0] = m;
+                    }
+                    int& h = history[pos.side][from_sq(m)][to_sq(m)];
+                    h += depth * depth;
+                    if (h > 60000)  // age: halve everything so recent cutoffs dominate
+                        for (auto& side : history) for (auto& row : side) for (int& v : row) v /= 2;
                 }
                 break;
             }
