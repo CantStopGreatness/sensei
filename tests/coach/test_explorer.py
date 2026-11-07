@@ -60,6 +60,22 @@ class ExplorerTest(unittest.TestCase):
         board = chess.Board("8/P7/8/8/8/8/k7/4K3 w - - 0 1")
         self.assertEqual(Explorer(fake).tablebase_best(board), chess.Move.from_uci("a7a8q"))
 
+    def test_castling_is_normalised(self):
+        board = chess.Board("r1bqkb1r/pppp1ppp/2n2n2/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4")
+        fake = FakeSession(FakeResponse(200, {"moves": [move("e1h1", "O-O", 100)]}))
+        self.assertEqual(Explorer(fake).masters(board)[0].uci, "e1g1")
+
+    def test_circuit_breaker(self):
+        # After a failure the explorer stays quiet for a minute instead of blocking every lookup.
+        fake = FakeSession(requests.Timeout())
+        e = Explorer(fake)
+        self.assertIsNone(e.masters(chess.Board()))
+        b = chess.Board()
+        b.push_san("e4")
+        self.assertIsNone(e.lichess(b, 1200))
+        self.assertIsNone(e.masters(b))
+        self.assertEqual(fake.calls, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

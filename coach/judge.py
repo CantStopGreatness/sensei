@@ -44,6 +44,7 @@ class Verdict:
     loss: int
     best: chess.Move | None
     consequence: str | None
+    from_book: bool = False  # best came from the masters book, not the engine
 
 
 def _is_book(move: chess.Move, masters: list[MoveStat] | None, human: list[MoveStat] | None) -> bool:
@@ -59,8 +60,9 @@ def _is_book(move: chess.Move, masters: list[MoveStat] | None, human: list[MoveS
 def judge(before: chess.Board, move: chess.Move, masters: list[MoveStat] | None,
           human: list[MoveStat] | None, an: Analyzer) -> Verdict:
     best = chess.Move.from_uci(masters[0].uci) if masters else None
+    from_book = best is not None
     if _is_book(move, masters, human):
-        return Verdict("book", 0, best, None)
+        return Verdict("book", 0, best, None, from_book)
     after = before.copy()
     after.push(move)
     after_score = an.score(after)  # for the opponent
@@ -69,8 +71,8 @@ def judge(before: chess.Board, move: chess.Move, masters: list[MoveStat] | None,
         best = next(iter(an.refutation(before)), None)
     if loss >= MISTAKE_CP:
         pv = an.refutation(after)
-        return Verdict("mistake", loss, best, describe(after, pv, before.turn, mate=after_score >= MATE - 100))
-    return Verdict("offbook", loss, best, None)
+        return Verdict("mistake", loss, best, describe(after, pv, before.turn, mate=after_score >= MATE - 100), from_book)
+    return Verdict("offbook", loss, best, None, from_book)
 
 
 def numbered_san(board: chess.Board, move: chess.Move) -> str:
@@ -121,8 +123,10 @@ def fit(text: str, limit: int = 140, names: tuple[str, ...] = ()) -> str:
 
 def msg_mistake(v: Verdict, move_san: str, book_san: str | None, book_name: str | None) -> str:
     text = f"{move_san} was a mistake: {v.consequence}."
-    if book_san:
+    if book_san and v.from_book:
         text += f" Book here is {book_san}" + (f" ({book_name})." if book_name else ".")
+    elif book_san:
+        text += f" Better was {book_san}."  # the engine's move: never call it book
     return fit(text, names=(book_name or "",))
 
 
@@ -142,13 +146,13 @@ def msg_trap_setter(t, victim: str) -> str:
 
 
 def msg_gambit(name: str, best_san: str) -> str:
-    return fit(f"That's the {name}. The best answer is {best_san}.", names=(name,))
+    return fit(f"That's the {name}. A strong reply is {best_san}.", names=(name,))
 
 
 def msg_summary(name: str | None, left_at: int | None, book_san: str | None) -> str:
     head = f"Opening over ({name})." if name else "Opening over."
     if left_at:
-        text = f"{head} You left book at move {left_at}; book was {book_san}."
+        text = f"{head} You left book at move {left_at}" + (f"; book was {book_san}." if book_san else ".")
     else:
         text = f"{head} You stayed in book the whole way. Nice!"
     return fit(text, names=(name or "",))

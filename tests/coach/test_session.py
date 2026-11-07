@@ -147,6 +147,37 @@ class SessionTest(unittest.TestCase):
         s = Session(chess.WHITE, FakeExplorer(), FakeAnalyzer(), level=None)
         self.assertTrue(s.decide(twenty).full_strength)
 
+    def test_gambit_message_only_for_beginners_gambit_once(self):
+        kg = board_after("e4", "e5", "f4")
+        ex = FakeExplorer({kg.copy(stack=False).epd(): [stat("e5f4", "exf4", 1000)],
+                           board_after("e4", "e5").epd(): [stat("f2f4", "f4", 1000)]})
+        s = Session(chess.BLACK, ex, FakeAnalyzer())
+        s.decide(board_after("e4"))
+        d = s.decide(kg)
+        self.assertEqual(d.messages, ["That's the King's Gambit. A strong reply is 2...exf4."])
+
+        qgd = board_after("d4", "d5", "c4", "e6")
+        ex = FakeExplorer({board_after("d4", "d5", "c4").epd(): [stat("e7e6", "e6", 1000)],
+                           qgd.epd(): [stat("b1c3", "Nc3", 1000)]})
+        s = Session(chess.WHITE, ex, FakeAnalyzer())
+        s.decide(board_after("d4", "d5"))
+        self.assertEqual(s.decide(qgd).messages, [])
+
+    def test_never_plays_trap_bait_in_gambit(self):
+        b = board_after("e4", "e5", "f4", "Bc5")  # Falkbeer ...Bc5 trap: fxe5?? Qh4+
+        ex = FakeExplorer({b.epd(): [MoveStat("f4e5", "fxe5", 100, 90, 5, 5), MoveStat("g1f3", "Nf3", 100, 40, 30, 30)]})
+        s = Session(chess.WHITE, ex, FakeAnalyzer())
+        s.decide(board_after("e4", "e5"))
+        self.assertEqual(s.decide(b).move, chess.Move.from_uci("g1f3"))
+
+    def test_engine_move_is_not_called_book(self):
+        s = Session(chess.WHITE, FakeExplorer(), FakeAnalyzer(each=150))
+        s.analyzer.refutation = lambda board: [chess.Move.from_uci("g8f6")] if board.turn == chess.BLACK else []
+        d = s.decide(board_after("e4", "f6"))
+        self.assertEqual(len(d.messages), 1)
+        self.assertNotIn("Book", d.messages[0])
+        self.assertNotIn("None", d.messages[0])
+
 
 if __name__ == "__main__":
     unittest.main()

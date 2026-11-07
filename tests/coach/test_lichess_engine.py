@@ -46,6 +46,31 @@ class LichessEngineTest(unittest.TestCase):
         self.assertEqual(chat.fetch(), [])
         chat.post("hello")  # must not raise
 
+    def test_restart_does_not_replay_replies(self):
+        import chess
+        from coach.lichess_engine import SenseiCoach
+        from coach.session import Session
+        posted = []
+        coach = SenseiCoach.__new__(SenseiCoach)
+        coach.session = Session(chess.WHITE, None, None)
+        coach.opponent = "beginner"
+        coach.me = "bigelephant67"
+        coach.chat_seen = None
+        coach.chat = type("Chat", (), {"post": lambda self, t: posted.append(t),
+                                       "fetch": lambda self: [("beginner", "!level 800"), ("BigElephant67", "Level set to 800.")]})()
+        self.assertFalse(coach._read_chat(replay=False))
+        self.assertEqual(coach.session.level, 800)
+        self.assertEqual(posted, [])
+
+    def test_time_spent_is_charged(self):
+        import chess
+        import chess.engine
+        from coach.lichess_engine import charge
+        limit = charge(chess.engine.Limit(white_clock=60.0, black_clock=60.0), chess.WHITE, 12.5)
+        self.assertEqual((limit.white_clock, limit.black_clock), (47.5, 60.0))
+        limit = charge(chess.engine.Limit(time=10.0), chess.BLACK, 12.0)
+        self.assertEqual(limit.time, 0.5)
+
 
 if __name__ == "__main__":
     unittest.main()

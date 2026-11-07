@@ -38,6 +38,7 @@ class Session:
         self.punish_next = False
         self.left_at: int | None = None
         self.left_book_san: str | None = None
+        self.gambit_said = False
 
     # ---- chat ---------------------------------------------------------------------------------
 
@@ -127,7 +128,7 @@ class Session:
 
         if v.kind == "mistake":
             self.punish_next = True
-            self._note_left_book(before, book_san)
+            self._note_left_book(before, book_san if v.from_book else None)
             return msg_mistake(v, move_san, book_san, book_name)
 
         trap = live_trap(board)
@@ -144,10 +145,13 @@ class Session:
             common_san = numbered_san(before, chess.Move.from_uci(common.uci)) if common else None
             return msg_offbook(move_san, book_san, book_name, common_san)
 
-        name = name_for(board)
-        if v.kind == "book" and name and "Gambit" in name:
+        # Once a game, when the beginner's own move offers a gambit: name the strong reply.
+        name, before_name = name_for(board), name_for(before) or ""
+        if (v.kind == "book" and not self.gambit_said and name and "Gambit" in name
+                and "Declined" not in name and "Gambit" not in before_name):
             answer = self._gambit_answer(board)
             if answer:
+                self.gambit_said = True
                 return msg_gambit(name, numbered_san(board, answer))
         return None
 
@@ -189,21 +193,21 @@ class Session:
                 self.lines = []
                 if not messages:
                     messages.append(fit(f"We've left the {fam} lines, so I'm back to main lines."))
-        name = name_for(board)
-        if name and "Gambit" in name:
-            answer = self._gambit_answer(board)
-            if answer:
-                return answer
         trap = live_trap(board)
         bait = trap.bait if trap and board.turn == self.color else None
+        name = name_for(board)
+        if name and "Gambit" in name:
+            answer = self._gambit_answer(board, avoid=bait)
+            if answer:
+                return answer
         for s in self.explorer.masters(board) or []:
             m = chess.Move.from_uci(s.uci)
             if board.is_legal(m) and board.san(m) != bait:
                 return m
         return None
 
-    def _gambit_answer(self, board: chess.Board) -> chess.Move | None:
-        """The best-scoring masters reply for the side to move."""
+    def _gambit_answer(self, board: chess.Board, avoid: str | None = None) -> chess.Move | None:
+        """The best-scoring masters reply for the side to move (never the `avoid` SAN)."""
         best, best_score = None, -1.0
         for s in self.explorer.masters(board) or []:
             if s.games < GAMBIT_MIN_GAMES:
@@ -211,7 +215,7 @@ class Session:
             wins = s.white if board.turn == chess.WHITE else s.black
             score = (wins + s.draws / 2) / s.games
             m = chess.Move.from_uci(s.uci)
-            if score > best_score and board.is_legal(m):
+            if score > best_score and board.is_legal(m) and board.san(m) != avoid:
                 best, best_score = m, score
         return best
 

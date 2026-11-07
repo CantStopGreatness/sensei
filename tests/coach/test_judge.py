@@ -76,7 +76,9 @@ class DescribeTest(unittest.TestCase):
             msg_gambit(longest, san),
             msg_summary(longest, 12, san),
             msg_summary(longest, None, None),
+            msg_summary(longest, 12, None),
         ]
+        self.assertNotIn("None", msg_summary("Italian Game", 5, None))
         for m in msgs:
             self.assertLessEqual(len(m), 140, m)
             self.assertNotIn("cp", m)
