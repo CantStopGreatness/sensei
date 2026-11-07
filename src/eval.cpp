@@ -1,8 +1,9 @@
 #include "eval.h"
+#include <algorithm>
 
-// Piece-square tables from the Chess Programming Wiki "Simplified Evaluation Function".
+// Starting weights. Piece-square tables from the Chess Programming Wiki "Simplified Evaluation Function".
 // Written as you'd see the board from White's side: first row is rank 8.
-static const int PST[6][64] = {
+static const int PST0[6][64] = {
     {  0,  0,  0,  0,  0,  0,  0,  0,
       50, 50, 50, 50, 50, 50, 50, 50,
       10, 10, 20, 30, 30, 20, 10, 10,
@@ -53,7 +54,7 @@ static const int PST[6][64] = {
       20, 30, 10,  0,  0, 10, 30, 20},
 };
 
-static const int KING_ENDGAME[64] = {
+static const int KING_ENDGAME0[64] = {
     -50,-40,-30,-20,-20,-30,-40,-50,
     -30,-20,-10,  0,  0,-10,-20,-30,
     -30,-10, 20, 30, 30, 20,-10,-30,
@@ -66,23 +67,32 @@ static const int KING_ENDGAME[64] = {
 namespace {
 
 constexpr Bitboard FILE_A = 0x0101010101010101ULL;
-
-// Bonuses by how far a passed pawn has come (relative rank 0-7), middlegame and endgame.
-constexpr int PASSED_MG[8] = {0, 5, 10, 15, 25, 40, 60, 0};
-constexpr int PASSED_EG[8] = {0, 10, 15, 30, 50, 80, 120, 0};
-constexpr int DOUBLED_MG = -10, DOUBLED_EG = -20;
-constexpr int ISOLATED_MG = -10, ISOLATED_EG = -15;
-constexpr int BISHOP_PAIR_MG = 30, BISHOP_PAIR_EG = 50;
-constexpr int ROOK_OPEN = 20, ROOK_SEMI_OPEN = 10;  // same in both phases
-// Mobility per reachable square beyond a typical count, by piece type.
-constexpr int MOBILITY_MG[6] = {0, 4, 5, 2, 1, 0};
-constexpr int MOBILITY_EG[6] = {0, 4, 5, 4, 2, 0};
 constexpr int MOBILITY_BASE[6] = {0, 4, 7, 7, 14, 0};
-// King safety: weight of each piece type attacking the squares around the enemy king.
-constexpr int ATTACK_UNITS[6] = {0, 2, 2, 3, 5, 0};
-constexpr int SHIELD_NEAR = 12, SHIELD_FAR = 6;  // own pawns one and two ranks in front of the king
 // Game phase: 24 with all minor and major pieces on the board, 0 with none.
 constexpr int PHASE_WEIGHT[6] = {0, 1, 1, 2, 4, 0};
+
+EvalParams defaults() {
+    EvalParams p{};
+    for (int t = 0; t < 6; t++) {
+        p.piece_mg[t] = p.piece_eg[t] = PIECE_VALUE[t];
+        for (int sq = 0; sq < 64; sq++) {
+            p.pst_mg[t][sq] = PST0[t][sq];
+            p.pst_eg[t][sq] = t == KING ? KING_ENDGAME0[sq] : PST0[t][sq];
+        }
+    }
+    const int passed_mg[8] = {0, 5, 10, 15, 25, 40, 60, 0}, passed_eg[8] = {0, 10, 15, 30, 50, 80, 120, 0};
+    for (int r = 0; r < 8; r++) p.passed_mg[r] = passed_mg[r], p.passed_eg[r] = passed_eg[r];
+    p.doubled_mg = -10, p.doubled_eg = -20;
+    p.isolated_mg = -10, p.isolated_eg = -15;
+    p.bishop_pair_mg = 30, p.bishop_pair_eg = 50;
+    p.rook_open_mg = p.rook_open_eg = 20;
+    p.rook_semi_open_mg = p.rook_semi_open_eg = 10;
+    const int mob_mg[6] = {0, 4, 5, 2, 1, 0}, mob_eg[6] = {0, 4, 5, 4, 2, 0}, units[6] = {0, 2, 2, 3, 5, 0};
+    for (int t = 0; t < 6; t++) p.mobility_mg[t] = mob_mg[t], p.mobility_eg[t] = mob_eg[t], p.attack_units[t] = units[t];
+    p.attack_scale = 2, p.attack_cap = 500;
+    p.shield_near = 12, p.shield_far = 6;
+    return p;
+}
 
 const struct Masks {
     Bitboard file[8], adjacent[8];
@@ -110,7 +120,10 @@ const struct Masks {
 
 }  // namespace
 
+EvalParams EVAL = defaults();
+
 int evaluate(const Position& pos) {
+    const EvalParams& P = EVAL;
     int mg[2] = {}, eg[2] = {}, phase = 0;
     Bitboard pawns[2] = {pos.pieces[WP], pos.pieces[BP]};
     Bitboard occ = pos.all();
@@ -128,18 +141,18 @@ int evaluate(const Position& pos) {
         Color c = color_of(p);
         // Tables are laid out rank 8 first, so White flips the square; Black reads it mirrored.
         int idx = c == WHITE ? sq ^ 56 : sq;
-        mg[c] += PIECE_VALUE[t] + PST[t][idx];
-        eg[c] += PIECE_VALUE[t] + (t == KING ? KING_ENDGAME[idx] : PST[t][idx]);
+        mg[c] += P.piece_mg[t] + P.pst_mg[t][idx];
+        eg[c] += P.piece_eg[t] + P.pst_eg[t][idx];
         phase += PHASE_WEIGHT[t];
 
         int f = sq % 8;
         if (t == PAWN) {
             if (!(M.passed[c][sq] & pawns[!c])) {
                 int rel_rank = c == WHITE ? sq / 8 : 7 - sq / 8;
-                mg[c] += PASSED_MG[rel_rank];
-                eg[c] += PASSED_EG[rel_rank];
+                mg[c] += P.passed_mg[rel_rank];
+                eg[c] += P.passed_eg[rel_rank];
             }
-            if (!(M.adjacent[f] & pawns[c])) mg[c] += ISOLATED_MG, eg[c] += ISOLATED_EG;
+            if (!(M.adjacent[f] & pawns[c])) mg[c] += P.isolated_mg, eg[c] += P.isolated_eg;
         }
         if (t >= KNIGHT && t <= QUEEN) {
             Bitboard att = t == KNIGHT ? KNIGHT_ATTACKS[sq]
@@ -147,31 +160,31 @@ int evaluate(const Position& pos) {
                          : t == ROOK   ? rook_attacks(sq, occ)
                                        : bishop_attacks(sq, occ) | rook_attacks(sq, occ);
             int mob = popcount(att & ~pos.occ[c] & ~pawn_attacks[!c]) - MOBILITY_BASE[t];
-            mg[c] += MOBILITY_MG[t] * mob;
-            eg[c] += MOBILITY_EG[t] * mob;
-            if (att & king_zone[!c]) attack_units[c] += ATTACK_UNITS[t], attackers[c]++;
+            mg[c] += P.mobility_mg[t] * mob;
+            eg[c] += P.mobility_eg[t] * mob;
+            if (att & king_zone[!c]) attack_units[c] += P.attack_units[t], attackers[c]++;
         }
         if (t == ROOK) {
-            if (!(M.file[f] & (pawns[WHITE] | pawns[BLACK]))) mg[c] += ROOK_OPEN, eg[c] += ROOK_OPEN;
-            else if (!(M.file[f] & pawns[c])) mg[c] += ROOK_SEMI_OPEN, eg[c] += ROOK_SEMI_OPEN;
+            if (!(M.file[f] & (pawns[WHITE] | pawns[BLACK]))) mg[c] += P.rook_open_mg, eg[c] += P.rook_open_eg;
+            else if (!(M.file[f] & pawns[c])) mg[c] += P.rook_semi_open_mg, eg[c] += P.rook_semi_open_eg;
         }
     }
     for (Color c : {WHITE, BLACK}) {
         for (int f = 0; f < 8; f++) {
             int n = popcount(M.file[f] & pawns[c]);
-            if (n > 1) mg[c] += DOUBLED_MG * (n - 1), eg[c] += DOUBLED_EG * (n - 1);
+            if (n > 1) mg[c] += P.doubled_mg * (n - 1), eg[c] += P.doubled_eg * (n - 1);
         }
         // King safety, middlegame only: pawn shelter, and a penalty that grows with the square of
         // the enemy firepower on the king's surroundings once at least two pieces join in.
         int ksq = king_sq[c];
         int ahead2 = c == WHITE ? ksq + 8 : ksq - 8;
-        mg[c] += SHIELD_NEAR * popcount(M.shield[c][ksq] & pawns[c]);
-        if (ahead2 >= 0 && ahead2 < 64) mg[c] += SHIELD_FAR * popcount(M.shield[c][ahead2] & pawns[c]);
+        mg[c] += P.shield_near * popcount(M.shield[c][ksq] & pawns[c]);
+        if (ahead2 >= 0 && ahead2 < 64) mg[c] += P.shield_far * popcount(M.shield[c][ahead2] & pawns[c]);
         if (attackers[!c] >= 2) {
             int u = attack_units[!c];
-            mg[c] -= u * u * 2 < 500 ? u * u * 2 : 500;
+            mg[c] -= std::min(P.attack_scale * u * u, P.attack_cap);
         }
-        if (popcount(pos.pieces[make_piece(c, BISHOP)]) >= 2) mg[c] += BISHOP_PAIR_MG, eg[c] += BISHOP_PAIR_EG;
+        if (popcount(pos.pieces[make_piece(c, BISHOP)]) >= 2) mg[c] += P.bishop_pair_mg, eg[c] += P.bishop_pair_eg;
     }
 
     phase = phase > 24 ? 24 : phase;  // early promotions can push it past 24

@@ -24,3 +24,6 @@ add_test(NAME perft COMMAND perft_tests)
 add_executable(search_tests tests/search_tests.cpp)
 target_link_libraries(search_tests core)
 add_test(NAME search COMMAND search_tests)
+
+add_executable(tune tools/tune.cpp)
+target_link_libraries(tune core)
