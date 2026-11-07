@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdlib>
 #include <mutex>
 #include <sstream>
 #include <string>
@@ -96,6 +97,8 @@ void uci_loop(std::istream& in, std::ostream& out) {
     std::atomic<bool> stop{false};
     std::atomic<bool> pondering{false};  // between "go ponder" and "ponderhit"
     int threads = 1;
+    bool limit_strength = false;
+    int elo = 1200;
     std::thread searcher;
     auto finish_search = [&] {
         stop = true;
@@ -111,7 +114,9 @@ void uci_loop(std::istream& in, std::ostream& out) {
             say(out, "id name Sensei\nid author Aryan Thakur\n"
                      "option name Hash type spin default 16 min 1 max 1024\n"
                      "option name Ponder type check default false\n"
-                     "option name Threads type spin default 1 min 1 max 64\nuciok");
+                     "option name Threads type spin default 1 min 1 max 64\n"
+                     "option name UCI_LimitStrength type check default false\n"
+                     "option name UCI_Elo type spin default 1200 min 400 max 2400\nuciok");
         } else if (cmd == "isready") {
             say(out, "readyok");
         } else if (cmd == "ucinewgame") {
@@ -119,13 +124,15 @@ void uci_loop(std::istream& in, std::ostream& out) {
             pos.set_fen(START_FEN);
             TT.clear();
         } else if (cmd == "setoption") {
-            // "setoption name Hash|Threads value <n>"; other options are ignored.
+            // "setoption name Hash|Threads|UCI_LimitStrength|UCI_Elo value <v>"; others are ignored.
             finish_search();
-            std::string name_kw, name, value_kw;
-            long n = 0;
-            if (ss >> name_kw >> name >> value_kw >> n) {
+            std::string name_kw, name, value_kw, value;
+            if (ss >> name_kw >> name >> value_kw >> value) {
+                long n = std::strtol(value.c_str(), nullptr, 10);
                 if (name == "Hash" && n >= 1 && n <= 1024) TT.resize(size_t(n));
                 if (name == "Threads" && n >= 1 && n <= 64) threads = int(n);
+                if (name == "UCI_LimitStrength") limit_strength = value == "true";
+                if (name == "UCI_Elo" && n > 0) elo = int(std::clamp(n, 400L, 2400L));
             }
         } else if (cmd == "position") {
             finish_search();
@@ -138,6 +145,7 @@ void uci_loop(std::istream& in, std::ostream& out) {
             pondering = ponder;
             if (ponder) limits.pondering = &pondering;
             limits.threads = threads;
+            if (limit_strength) limits.elo = elo;
             searcher = std::thread([&out, &stop, &pondering, limits, infinite, p = pos]() mutable {
                 SearchResult r = search(p, limits, stop, out);
                 // UCI: after "go infinite", and while pondering, bestmove waits for "stop" or "ponderhit".

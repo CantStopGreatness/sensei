@@ -4,6 +4,7 @@
 #include "tt.h"
 #include "uci.h"
 #include <algorithm>
+#include <random>
 #include <chrono>
 #include <vector>
 #include <thread>
@@ -322,7 +323,8 @@ SearchResult search(Position& pos, const SearchLimits& limits, const std::atomic
     TT.new_search();
     std::atomic<bool> helpers_stop{false};
     std::vector<std::thread> helpers;
-    for (int id = 1; id < limits.threads; id++) {
+    const int max_depth = limits.elo > 0 ? std::min(limits.depth, 1 + (limits.elo - 400) / 200) : limits.depth;
+    for (int id = 1; id < (limits.elo > 0 ? 1 : limits.threads); id++) {
         helpers.emplace_back([p = pos, &helpers_stop, id]() mutable {  // copy now, before main moves
             auto h = std::make_unique<Searcher>(Searcher{p, helpers_stop, Clock::now(), -1, nullptr});
             h->can_abort = true;
@@ -337,7 +339,7 @@ SearchResult search(Position& pos, const SearchLimits& limits, const std::atomic
     SearchResult result;
     int stable = 0;  // iterations in a row the best move hasn't changed
 
-    for (int depth = 1; depth <= limits.depth; depth++) {
+    for (int depth = 1; depth <= max_depth; depth++) {
         s.can_abort = depth > 1;
         // Aspiration window: expect a score near the last one; widen and re-search on a miss.
         int score, delta = 25;
@@ -381,6 +383,34 @@ SearchResult search(Position& pos, const SearchLimits& limits, const std::atomic
     }
     helpers_stop = true;
     for (auto& t : helpers) t.join();
+
+    // Strength limit: score every root move one ply shallower, then pick one at random with
+    // weight exp((score - best) / T). T shrinks as the level rises; a found mate is always played.
+    if (limits.elo > 0 && result.best && result.score < MATE - MAX_PLY) {
+        MoveList list;
+        generate_legal(pos, list);
+        std::vector<std::pair<Move, int>> scored;
+        for (Move m : list) {
+            Undo u;
+            pos.make_move(m, u);
+            s.moves_made[0] = m;
+            int sc = -s.negamax(std::max(max_depth - 1, 0), -MATE - 1, MATE + 1, 1);
+            pos.unmake_move(m, u);
+            if (s.aborted) break;
+            scored.push_back({m, sc});
+        }
+        if (!s.aborted && !scored.empty()) {
+            int best = std::max_element(scored.begin(), scored.end(),
+                                        [](auto& a, auto& b) { return a.second < b.second; })->second;
+            double t = std::max(10, (2400 - limits.elo) / 8);
+            std::vector<double> w;
+            for (auto& [m, sc] : scored) w.push_back(std::exp((sc - best) / t));
+            std::mt19937 rng(limits.seed ? limits.seed : std::random_device{}());
+            Move pick = scored[std::discrete_distribution<size_t>(w.begin(), w.end())(rng)].first;
+            if (pick != result.best) result.ponder = 0;
+            result.best = pick;
+        }
+    }
 
     // A TT cutoff right after the root leaves a one-move PV; take the expected reply from the
     // TT instead, so there's still something to ponder on.
