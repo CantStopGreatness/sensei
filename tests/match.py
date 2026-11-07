@@ -23,6 +23,9 @@ ap.add_argument("old")
 ap.add_argument("--games", type=int, default=200, help="rounded up to an even number")
 ap.add_argument("--tc", default="5+0.05", help="seconds+increment per side")
 ap.add_argument("--concurrency", type=int, default=6)
+ap.add_argument("--new-option", action="append", default=[], metavar="NAME=VALUE",
+                help="UCI option for NEW, e.g. Threads=4; repeatable")
+ap.add_argument("--old-option", action="append", default=[], metavar="NAME=VALUE", help="same, for OLD")
 ap.add_argument("--elo0", type=float, default=0)
 ap.add_argument("--elo1", type=float, default=10)
 args = ap.parse_args()
@@ -41,10 +44,20 @@ def random_opening(rng):
             return board.move_stack[:]
 
 
-def play_game(paths, opening):
+def parse_options(pairs):
+    return dict(p.split("=", 1) for p in pairs)
+
+
+OPTIONS = {"new": parse_options(args.new_option), "old": parse_options(args.old_option)}
+
+
+def play_game(paths, opening, options):
     """paths[0] plays White. Returns 1, 0.5 or 0 from White's point of view, and how it ended."""
     engines = [chess.engine.SimpleEngine.popen_uci(p) for p in paths]
     try:
+        for engine, opts in zip(engines, options):
+            if opts:
+                engine.configure(opts)
         board = chess.Board()
         for m in opening:
             board.push(m)
@@ -81,7 +94,8 @@ def play_pair(i):
     opening = random_opening(random.Random(i))
     for new_is_white in (True, False):
         paths = [args.new, args.old] if new_is_white else [args.old, args.new]
-        white_score, how = play_game(paths, opening)
+        options = [OPTIONS["new"], OPTIONS["old"]] if new_is_white else [OPTIONS["old"], OPTIONS["new"]]
+        white_score, how = play_game(paths, opening, options)
         score = white_score if new_is_white else 1 - white_score
         with lock:
             if score == 1:

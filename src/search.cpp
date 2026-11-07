@@ -5,6 +5,9 @@
 #include "uci.h"
 #include <algorithm>
 #include <chrono>
+#include <vector>
+#include <thread>
+#include <memory>
 #include <cmath>
 #include <cstdlib>
 #include <sstream>
@@ -175,12 +178,12 @@ struct Searcher {
         // A good-enough earlier result for this position ends the search here. Not at the
         // root, which must always produce a move and a PV.
         Move hash_move = ply == 0 ? root_best : 0;
-        if (const TTEntry* e = TT.probe(pos.hash)) {
-            if (ply > 0) hash_move = e->move;
-            int score = score_from_tt(e->score, ply);
-            if (ply > 0 && e->depth >= depth &&
-                (e->bound == BOUND_EXACT || (e->bound == BOUND_LOWER && score >= beta) ||
-                 (e->bound == BOUND_UPPER && score <= alpha)))
+        if (TTEntry e; TT.probe(pos.hash, e)) {
+            if (ply > 0) hash_move = e.move;
+            int score = score_from_tt(e.score, ply);
+            if (ply > 0 && e.depth >= depth &&
+                (e.bound == BOUND_EXACT || (e.bound == BOUND_LOWER && score >= beta) ||
+                 (e.bound == BOUND_UPPER && score <= alpha)))
                 return score;
         }
 
@@ -282,6 +285,22 @@ std::string score_string(int score) {
 }  // namespace
 
 SearchResult search(Position& pos, const SearchLimits& limits, const std::atomic<bool>& stop, std::ostream& out) {
+    // Lazy SMP: helper threads search the same position on private copies, sharing only the TT.
+    // They print nothing and stop when the main search does; what they add is TT entries the
+    // main thread finds ready. Odd helpers start one ply deeper so the threads spread out.
+    std::atomic<bool> helpers_stop{false};
+    std::vector<std::thread> helpers;
+    for (int id = 1; id < limits.threads; id++) {
+        helpers.emplace_back([p = pos, &helpers_stop, id]() mutable {  // copy now, before main moves
+            auto h = std::make_unique<Searcher>(Searcher{p, helpers_stop, Clock::now(), -1, nullptr});
+            h->can_abort = true;
+            for (int depth = 1 + (id & 1); depth < MAX_PLY && !h->aborted; depth++) {
+                h->negamax(depth, -MATE - 1, MATE + 1, 0);
+                if (h->pv_len[0]) h->root_best = h->pv[0][0];
+            }
+        });
+    }
+
     Searcher s{pos, stop, Clock::now(), limits.time_ms, limits.pondering};
     SearchResult result;
     int stable = 0;  // iterations in a row the best move hasn't changed
@@ -328,15 +347,18 @@ SearchResult search(Position& pos, const SearchLimits& limits, const std::atomic
             break;
         }
     }
+    helpers_stop = true;
+    for (auto& t : helpers) t.join();
+
     // A TT cutoff right after the root leaves a one-move PV; take the expected reply from the
     // TT instead, so there's still something to ponder on.
     if (result.best && !result.ponder) {
         Undo u;
         pos.make_move(result.best, u);
-        if (const TTEntry* e = TT.probe(pos.hash)) {
+        if (TTEntry e; TT.probe(pos.hash, e)) {
             MoveList list;
             generate_legal(pos, list);
-            if (std::find(list.begin(), list.end(), e->move) != list.end()) result.ponder = e->move;
+            if (std::find(list.begin(), list.end(), e.move) != list.end()) result.ponder = e.move;
         }
         pos.unmake_move(result.best, u);
     }

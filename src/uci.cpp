@@ -95,6 +95,7 @@ void uci_loop(std::istream& in, std::ostream& out) {
     pos.set_fen(START_FEN);
     std::atomic<bool> stop{false};
     std::atomic<bool> pondering{false};  // between "go ponder" and "ponderhit"
+    int threads = 1;
     std::thread searcher;
     auto finish_search = [&] {
         stop = true;
@@ -109,7 +110,8 @@ void uci_loop(std::istream& in, std::ostream& out) {
         if (cmd == "uci") {
             say(out, "id name Sensei\nid author Aryan Thakur\n"
                      "option name Hash type spin default 16 min 1 max 1024\n"
-                     "option name Ponder type check default false\nuciok");
+                     "option name Ponder type check default false\n"
+                     "option name Threads type spin default 1 min 1 max 64\nuciok");
         } else if (cmd == "isready") {
             say(out, "readyok");
         } else if (cmd == "ucinewgame") {
@@ -117,12 +119,14 @@ void uci_loop(std::istream& in, std::ostream& out) {
             pos.set_fen(START_FEN);
             TT.clear();
         } else if (cmd == "setoption") {
-            // "setoption name Hash value <MB>"; other options are ignored.
+            // "setoption name Hash|Threads value <n>"; other options are ignored.
             finish_search();
             std::string name_kw, name, value_kw;
-            long mb = 0;
-            if (ss >> name_kw >> name >> value_kw >> mb && name == "Hash" && mb >= 1 && mb <= 1024)
-                TT.resize(size_t(mb));
+            long n = 0;
+            if (ss >> name_kw >> name >> value_kw >> n) {
+                if (name == "Hash" && n >= 1 && n <= 1024) TT.resize(size_t(n));
+                if (name == "Threads" && n >= 1 && n <= 64) threads = int(n);
+            }
         } else if (cmd == "position") {
             finish_search();
             set_position(pos, ss, out);
@@ -133,6 +137,7 @@ void uci_loop(std::istream& in, std::ostream& out) {
             stop = false;
             pondering = ponder;
             if (ponder) limits.pondering = &pondering;
+            limits.threads = threads;
             searcher = std::thread([&out, &stop, &pondering, limits, infinite, p = pos]() mutable {
                 SearchResult r = search(p, limits, stop, out);
                 // UCI: after "go infinite", and while pondering, bestmove waits for "stop" or "ponderhit".

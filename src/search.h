@@ -14,6 +14,7 @@ struct SearchLimits {
     // While *pondering is true the time limits are ignored; when it turns false (UCI "ponderhit")
     // the clock starts and the limits apply from that moment. nullptr = not a ponder search.
     const std::atomic<bool>* pondering = nullptr;
+    int threads = 1;  // search threads, main one included (UCI option Threads)
 };
 
 struct SearchResult {
