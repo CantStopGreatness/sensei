@@ -3,9 +3,10 @@
 
 TranspositionTable TT;
 
-static uint64_t pack(const TTEntry& e) {
+// Packed entry: move (16 bits), score (16), depth (8), bound (8), generation (8).
+static uint64_t pack(const TTEntry& e, uint8_t gen) {
     return uint64_t(e.move) | uint64_t(uint16_t(e.score)) << 16 | uint64_t(uint8_t(e.depth)) << 32 |
-           uint64_t(e.bound) << 40;
+           uint64_t(e.bound) << 40 | uint64_t(gen) << 48;
 }
 
 static TTEntry unpack(uint64_t d) {
@@ -13,35 +14,49 @@ static TTEntry unpack(uint64_t d) {
 }
 
 void TranspositionTable::resize(size_t mb) {
-    size_t entries = 1;
-    while (entries * 2 * sizeof(Slot) <= mb * 1024 * 1024) entries *= 2;
-    table = std::make_unique<Slot[]>(entries);
-    mask = entries - 1;
+    size_t buckets = 1;
+    while (buckets * 2 * sizeof(Bucket) <= mb * 1024 * 1024) buckets *= 2;
+    table = std::make_unique<Bucket[]>(buckets);
+    mask = buckets - 1;
 }
 
 void TranspositionTable::clear() {
-    for (size_t i = 0; i <= mask; i++) table[i].check = 0, table[i].data = 0;
+    for (size_t i = 0; i <= mask; i++)
+        for (Slot& s : table[i].slots) s.check = 0, s.data = 0;
+    generation = 0;
 }
 
 bool TranspositionTable::probe(uint64_t key, TTEntry& out) const {
-    const Slot& s = table[key & mask];
-    uint64_t data = s.data.load(std::memory_order_relaxed);
-    if ((s.check.load(std::memory_order_relaxed) ^ data) != key) return false;
-    out = unpack(data);
-    return out.bound != BOUND_NONE;
+    for (const Slot& s : table[key & mask].slots) {
+        uint64_t data = s.data.load(std::memory_order_relaxed);
+        if ((s.check.load(std::memory_order_relaxed) ^ data) != key) continue;
+        out = unpack(data);
+        if (out.bound != BOUND_NONE) return true;
+    }
+    return false;
 }
 
-// ponytail: one slot per index, replace unless the old entry for this same position was
-// searched deeper. Buckets with aging are the upgrade when the table fills up in long games.
 void TranspositionTable::store(uint64_t key, int depth, int score, Bound bound, Move move, int ply) {
-    Slot& s = table[key & mask];
+    Slot* target = nullptr;
+    int worst = 1 << 30;
     TTEntry old;
-    bool same = probe(key, old);
+    bool same = false;
+    for (Slot& s : table[key & mask].slots) {
+        uint64_t data = s.data.load(std::memory_order_relaxed);
+        if ((s.check.load(std::memory_order_relaxed) ^ data) == key) {  // this position: update in place
+            target = &s, old = unpack(data), same = old.bound != BOUND_NONE;
+            break;
+        }
+        // Otherwise evict the least valuable: shallow, or left over from earlier searches.
+        int age = uint8_t(generation - uint8_t(data >> 48));
+        int value = unpack(data).bound == BOUND_NONE ? -(1 << 20) : int8_t(uint8_t(data >> 32)) - 8 * age;
+        if (value < worst) worst = value, target = &s;
+    }
     if (same && old.depth > depth && bound != BOUND_EXACT) return;
     TTEntry e{same && !move ? old.move : move, int16_t(score_to_tt(score, ply)), int8_t(depth), uint8_t(bound)};
-    uint64_t data = pack(e);
-    s.data.store(data, std::memory_order_relaxed);
-    s.check.store(key ^ data, std::memory_order_relaxed);
+    uint64_t data = pack(e, generation);
+    target->data.store(data, std::memory_order_relaxed);
+    target->check.store(key ^ data, std::memory_order_relaxed);
 }
 
 int score_to_tt(int score, int ply) {

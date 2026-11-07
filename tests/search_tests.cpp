@@ -144,6 +144,25 @@ int main() {
         check(run(pos, 3).best == 0, "stalemate: no move, no crash");
     }
 
+    std::cout << "\nTransposition table buckets\n";
+    {
+        TranspositionTable tt(1);
+        // Same low bits, so all land in one 4-slot bucket.
+        auto key = [](int i) { return (uint64_t(i + 1) << 40) | 5; };
+        auto has = [&](int i) { TTEntry e; return tt.probe(key(i), e); };
+        for (int i = 0; i < 4; i++) tt.store(key(i), 5 + i, 0, BOUND_EXACT, 0, 0);  // depths 5-8
+        check(has(0) && has(1) && has(2) && has(3), "a bucket holds 4 colliding positions");
+        tt.store(key(4), 9, 0, BOUND_EXACT, 0, 0);
+        check(!has(0) && has(1) && has(2) && has(3) && has(4), "a full bucket evicts the shallowest entry");
+        tt.new_search();
+        tt.new_search();
+        tt.store(key(5), 3, 0, BOUND_EXACT, 0, 0);
+        check(!has(1) && has(5), "entries from earlier searches count as shallower and go first");
+        tt.store(key(5), 1, 0, BOUND_LOWER, 0, 0);
+        TTEntry e;
+        check(tt.probe(key(5), e) && e.depth == 3, "a shallower non-exact result doesn't overwrite a deeper one");
+    }
+
     std::cout << "\nCaptures-only generation\n";
     {
         // Must equal the full legal list filtered to captures and promotions, at every node.

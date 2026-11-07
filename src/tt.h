@@ -14,6 +14,8 @@ struct TTEntry {
 };
 
 // Fixed-size hash table of search results, indexed by Zobrist key, shared by all search threads.
+// Each index is a bucket of 4 slots (one 64-byte cache line). When a bucket is full, the slot
+// with the least depth goes, counting older searches' entries as shallower.
 // Lockless: each slot holds the packed entry and key ^ entry as two relaxed atomics, so a slot
 // torn by two threads writing at once fails the key check instead of returning mixed data.
 class TranspositionTable {
@@ -21,6 +23,7 @@ public:
     explicit TranspositionTable(size_t mb = 16) { resize(mb); }
     void resize(size_t mb);  // rounds down to a power-of-two entry count; clears
     void clear();
+    void new_search() { generation++; }  // ages every stored entry by one search
     // True and fills `out` if this key is stored. Mate scores come back relative to the node
     // they were stored at; convert with score_from_tt.
     bool probe(uint64_t key, TTEntry& out) const;
@@ -31,8 +34,13 @@ private:
         std::atomic<uint64_t> check{0};  // key ^ data
         std::atomic<uint64_t> data{0};
     };
-    std::unique_ptr<Slot[]> table;
-    size_t mask = 0;
+    static constexpr int BUCKET = 4;
+    struct alignas(64) Bucket {
+        Slot slots[BUCKET];
+    };
+    std::unique_ptr<Bucket[]> table;
+    size_t mask = 0;  // bucket count - 1
+    uint8_t generation = 0;
 };
 
 extern TranspositionTable TT;  // one search at a time; its threads share this table

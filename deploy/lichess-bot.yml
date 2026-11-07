@@ -14,7 +14,7 @@ engine:
   protocol: "uci"
   ponder: true             # think on the opponent's time
   uci_options:
-    Hash: 64
+    Hash: 256              # MB; 4 threads fill a small table fast
     Threads: 4             # Lazy SMP; one game at a time, so most cores would idle otherwise
 
   # Moves fetched from Lichess instead of searched. Both need at least min_time seconds left.
