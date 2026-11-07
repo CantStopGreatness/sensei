@@ -55,6 +55,7 @@ int see(const Position& pos, Move m) {
 namespace {
 
 using Clock = std::chrono::steady_clock;
+constexpr int MAX_MOVES = 256;
 
 // Late-move reduction in plies, by [depth][move index]; grows with both.
 const struct LmrTable {
@@ -80,7 +81,9 @@ struct Searcher {
     uint64_t nodes = 0;
     Move root_best = 0;      // best move of the previous iteration, searched first
     Move killers[MAX_PLY][2] = {};
-    int history[2][64][64] = {};     // [side][from][to]: quiet moves that caused cutoffs
+    int history[2][64][64] = {};     // [side][from][to]: quiet moves that caused cutoffs, minus ones that didn't
+    Move countermove[12][64] = {};   // [piece][to] of the previous move: the quiet reply that refuted it
+    Move moves_made[MAX_PLY] = {};   // move played at each ply on the current line; 0 for a null move
     Move pv[MAX_PLY][MAX_PLY] = {};  // triangular PV table
     int pv_len[MAX_PLY] = {};
 
@@ -117,7 +120,23 @@ struct Searcher {
         if (is_promo(m)) return 95000 + PIECE_VALUE[promo_type(m)];
         if (m == killers[ply][0]) return 90000;
         if (m == killers[ply][1]) return 80000;
+        if (m == counter_to(ply)) return 70000;
         return history[pos.side][from_sq(m)][to_sq(m)];  // kept below 80000 by aging
+    }
+
+    // The counter move to the opponent's last move, or 0. Quiescence doesn't record its moves,
+    // so there moves_made can be stale and point at an empty square.
+    Move counter_to(int ply) const {
+        Move prev = ply > 0 ? moves_made[ply - 1] : 0;
+        Piece p = prev ? pos.board[to_sq(prev)] : NO_PIECE;
+        return p == NO_PIECE ? 0 : countermove[p][to_sq(prev)];
+    }
+
+    void update_history(Move m, int bonus) {
+        int& h = history[pos.side][from_sq(m)][to_sq(m)];
+        h += bonus;
+        if (h > 60000 || h < -60000)  // age: halve everything so recent results dominate
+            for (auto& side : history) for (auto& row : side) for (int& v : row) v /= 2;
     }
 
     void order(MoveList& list, int ply, Move hash_move = 0) const {
@@ -187,6 +206,9 @@ struct Searcher {
                 return score;
         }
 
+        // Internal iterative reduction: no hash move means poor ordering here, so search shallower.
+        if (ply > 0 && depth >= 4 && !hash_move) depth--;
+
         bool pv_node = beta - alpha > 1;
         int static_eval = in_check ? -MATE : evaluate(pos);
         bool no_mates = std::abs(alpha) < MATE - MAX_PLY && std::abs(beta) < MATE - MAX_PLY;
@@ -203,6 +225,7 @@ struct Searcher {
             static_eval >= beta) {
             int r = depth > 6 ? 3 : 2;
             Undo u;
+            moves_made[ply] = 0;
             pos.make_null(u);
             int score = -negamax(depth - 1 - r, -beta, -beta + 1, ply + 1, false);
             pos.unmake_null(u);
@@ -218,17 +241,24 @@ struct Searcher {
         // Futility pruning: near the leaves, quiet moves can't lift a hopeless static eval to alpha.
         bool futile = !pv_node && !in_check && depth <= 2 && no_mates && static_eval + 120 * depth <= alpha;
 
+        // Late move pruning: at shallow non-PV nodes, quiet moves this far down the ordering
+        // almost never matter.
+        int lmp_limit = !pv_node && !in_check && depth <= 5 && no_mates ? 3 + depth * depth : MAX_MOVES;
+
         int alpha_orig = alpha, best = -MATE;
         Move best_move = 0;
+        Move quiets[MAX_MOVES];
+        int quiet_count = 0;
         for (int i = 0; i < list.size; i++) {
             Move m = list.moves[i];
             bool quiet = !is_capture(m) && !is_promo(m);
             Undo u;
             pos.make_move(m, u);
-            if (futile && i > 0 && quiet && !pos.in_check()) {
+            if (i > 0 && quiet && (futile || quiet_count >= lmp_limit) && !pos.in_check()) {
                 pos.unmake_move(m, u);
                 continue;
             }
+            moves_made[ply] = m;
             int score;
             if (i == 0) {
                 score = -negamax(depth - 1, -beta, -alpha, ply + 1);
@@ -247,6 +277,7 @@ struct Searcher {
             }
             pos.unmake_move(m, u);
             if (aborted) return 0;
+            if (quiet && quiet_count < MAX_MOVES) quiets[quiet_count++] = m;
 
             if (score > best) best = score;
             if (score > alpha) {
@@ -262,10 +293,10 @@ struct Searcher {
                         killers[ply][1] = killers[ply][0];
                         killers[ply][0] = m;
                     }
-                    int& h = history[pos.side][from_sq(m)][to_sq(m)];
-                    h += depth * depth;
-                    if (h > 60000)  // age: halve everything so recent cutoffs dominate
-                        for (auto& side : history) for (auto& row : side) for (int& v : row) v /= 2;
+                    if (Move prev = ply > 0 ? moves_made[ply - 1] : 0)
+                        countermove[pos.board[to_sq(prev)]][to_sq(prev)] = m;
+                    update_history(m, depth * depth);
+                    for (int q = 0; q < quiet_count - 1; q++) update_history(quiets[q], -depth * depth);  // tried first, failed
                 }
                 break;
             }
