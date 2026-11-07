@@ -33,9 +33,11 @@ python3 tests/selfplay.py --games 100 --vs-random  # must beat a random mover ev
 python3 tests/ponder_test.py                       # go ponder / ponderhit / stop over UCI, with real timing
 python3 tests/match.py NEW OLD --games 200 --tc 5+0.05  # match two builds: Elo +/- error and SPRT
 python3 tests/match.py NEW OLD --new-option Threads=4  # set UCI options per side (repeatable; also --old-option)
+pip install requests
+python3 -m unittest discover -s tests/coach -t .  # opening coach: explorer, openings, traps (checked by the engine), judge, session
 ```
 
-CI (`.github/workflows/ci.yml`) runs the perft and search tests and 20 games against a random mover on Linux and macOS for every pull request and every push to `main`.
+CI (`.github/workflows/ci.yml`) runs the perft, search and coach tests and 20 games against a random mover on Linux and macOS for every pull request and every push to `main`.
 
 ### Tuning the evaluation
 
@@ -63,12 +65,23 @@ Sensei plays through [lichess-bot](https://github.com/lichess-bot-devs/lichess-b
    git clone https://github.com/lichess-bot-devs/lichess-bot.git && cd lichess-bot
    python3 -m venv venv && . venv/bin/activate && python3 -m pip install -r requirements.txt
    ln -s ../sensei-release/deploy/lichess-bot.yml config.yml
+   ln -sf ../sensei-release/deploy/homemade.py homemade.py  # replaces lichess-bot's example engines with the coach
    export LICHESS_BOT_TOKEN=lip_...
    ```
 4. Upgrade the account to a bot. **This can't be undone**, and the bot starts playing right after: `python3 lichess-bot.py -u`
 5. From then on, start it with `python3 lichess-bot.py`, or on macOS let launchd run it (below).
 
 The config uses the Lichess masters database as an opening book and Lichess's online tablebases for endgames with 7 or fewer pieces.
+
+### Opening coach
+
+Against a human in a **casual** game at **rapid or slower** (10+0 and up) from the normal start position, Sensei coaches the opening in the game chat. Every other game — bots, rated, blitz and bullet — plays at full strength exactly as above.
+
+- Its greeting lists two commands: `!level 400`–`!level 2400` (or `!level max`) sets its strength after the opening (default 1200), and `!opening italian` (any name from the [Lichess opening list](https://github.com/lichess-org/chess-openings)) picks an opening to practise; Sensei plays the other side. As White it waits 15 seconds for commands before its first move.
+- In the opening it plays main lines from master games. When you leave the book it names the book move and the most common move at your level; when a move is a real mistake (Sensei's search says it loses 150+ centipawns) it explains what goes wrong and plays the refutation. It also warns about, and praises you for setting, 32 well-known traps, and names the best answer to gambits.
+- At most one coaching message per move. When the opening ends (out of both databases, or after move 15) it posts a short summary and plays on at the chosen level.
+
+The code is in `coach/`; lichess-bot loads it through `deploy/homemade.py` (engine `protocol: homemade`, `name: SenseiCoach`).
 
 ### Keeping it running (macOS)
 
@@ -87,7 +100,7 @@ Logs go to `~/lichess-bot/bot.log`. Restart with `launchctl kickstart -k gui/$(i
 
 ### Deploying a new version
 
-After merging to `main`: `cd ~/sensei-release && git pull && cmake --build build --target sensei`, then restart lichess-bot (the `kickstart` command above).
+After merging to `main`: `cd ~/sensei-release && git pull && cmake --build build --target sensei`, then restart lichess-bot (the `kickstart` command above). The first time the coach is deployed, also run the `homemade.py` symlink command from step 3.
 
 ## Results
 

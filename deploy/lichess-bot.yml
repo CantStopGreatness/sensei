@@ -10,14 +10,15 @@ url: "https://lichess.org/"
 
 engine:
   dir: "../sensei-release/build/"
-  name: "sensei"
-  protocol: "uci"
-  ponder: true             # think on the opponent's time
-  uci_options:
+  name: "SenseiCoach"       # coach/lichess_engine.py, via deploy/homemade.py; runs build/sensei
+  protocol: "homemade"
+  ponder: true             # think on the opponent's time (not in coaching games)
+  homemade_options:
     Hash: 256              # MB; 4 threads fill a small table fast
     Threads: 4             # Lazy SMP; one game at a time, so most cores would idle otherwise
 
   # Moves fetched from Lichess instead of searched. Both need at least min_time seconds left.
+  # Coaching games (human, casual, rapid or slower) turn these off and use the coach's own book.
   online_moves:
     max_out_of_book_moves: 10    # give up on the book after this many misses in a game
     lichess_opening_explorer:    # opening book: the masters database
