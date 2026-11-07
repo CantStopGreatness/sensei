@@ -1,0 +1,152 @@
+import unittest
+
+import chess
+
+from coach.explorer import MoveStat
+from coach.session import Decision, Session
+
+
+def stat(uci, san, games):
+    return MoveStat(uci, san, games, games // 2, games // 4, games - games // 2 - games // 4)
+
+
+def board_after(*sans):
+    b = chess.Board()
+    for s in sans:
+        b.push_san(s)
+    return b
+
+
+class FakeExplorer:
+    def __init__(self, masters=None, human=None, default_masters=None):
+        self.m, self.h, self.default = masters or {}, human or {}, default_masters
+
+    def masters(self, board):
+        return self.m.get(board.epd(), self.default)
+
+    def lichess(self, board, rating):
+        return self.h.get(board.epd())
+
+
+class FakeAnalyzer:
+    """Every position scores `each` for the side to move, so any move loses 2 * each."""
+
+    def __init__(self, each=0, fail=False):
+        self.each, self.fail = each, fail
+
+    def score(self, board):
+        if self.fail:
+            raise RuntimeError("engine died")
+        return self.each
+
+    def refutation(self, board):
+        if self.fail:
+            raise RuntimeError("engine died")
+        return []
+
+
+class SessionTest(unittest.TestCase):
+    def test_command_parsing(self):
+        s = Session(chess.WHITE, FakeExplorer(), FakeAnalyzer())
+        replies = []
+        replies.append(s.command("!level 800"))
+        self.assertEqual(s.level, 800)
+        self.assertEqual(replies[-1], "Level set to 800.")
+        s.level = 1200
+        replies.append(s.command("  !LEVEL 800 "))
+        self.assertEqual(s.level, 800)
+        replies.append(s.command("!level 99999"))
+        self.assertEqual(s.level, 2400)
+        self.assertEqual(replies[-1], "Level set to 2400.")
+        replies.append(s.command("!level abc"))
+        self.assertEqual(replies[-1], "Use !level 400-2400 or !level max.")
+        self.assertEqual(s.level, 2400)
+        replies.append(s.command("!level max"))
+        self.assertIsNone(s.level)
+        self.assertEqual(replies[-1], "Level set to max.")
+        replies.append(s.command("!opening xyzzy"))
+        self.assertEqual(replies[-1], "Couldn't find that opening. Try e.g. !opening sicilian.")
+        replies.append(s.command("!opening italian"))
+        self.assertEqual(replies[-1], "Practising the Italian Game. I'll play the other side.")
+        self.assertIsNone(s.command("hello"))
+        self.assertIsNone(s.command("!wait"))  # lichess-bot's own command
+        replies.append(s.greeting())
+        for r in replies:
+            self.assertLessEqual(len(r), 140, r)
+        self.assertIn("!level", s.greeting())
+        self.assertIn("!opening", s.greeting())
+
+    def test_plays_main_line(self):
+        ex = FakeExplorer({chess.Board().epd(): [stat("e2e4", "e4", 1000), stat("d2d4", "d4", 900)]})
+        d = Session(chess.WHITE, ex, FakeAnalyzer()).decide(chess.Board())
+        self.assertEqual(d.move, chess.Move.from_uci("e2e4"))
+        self.assertEqual(d.messages, [])
+
+    def test_opening_choice_steers(self):
+        b = board_after("e4", "e5", "Nf3", "Nc6")
+        ex = FakeExplorer({b.epd(): [stat("d2d4", "d4", 5000)]})
+        s = Session(chess.WHITE, ex, FakeAnalyzer())
+        s.command("!opening italian")
+        s.decide(chess.Board())
+        self.assertEqual(s.decide(b).move, chess.Move.from_uci("f1c4"))
+
+    def test_mistake_is_punished_and_explained(self):
+        s = Session(chess.BLACK, FakeExplorer(), FakeAnalyzer(each=150))
+        d = s.decide(board_after("e4"))
+        self.assertEqual(len(d.messages), 1)
+        self.assertTrue(d.messages[0].startswith("1.e4 was a mistake"), d.messages)
+        self.assertIsNone(d.move)
+        self.assertTrue(d.full_strength)
+
+    def test_one_message_per_move(self):
+        setup = "e4 e5 Nf3 d6 Bc4 Bg4 Nc3 g6 Nxe5".split()  # Légal's mate, Sensei (Black) is the victim
+        b = board_after(*setup)
+        before = b.copy()
+        before.pop()
+        ex = FakeExplorer({before.epd(): [stat("h2h3", "h3", 500)]})
+        d = Session(chess.BLACK, ex, FakeAnalyzer()).decide(board_after(*setup[:1]))
+        s = Session(chess.BLACK, ex, FakeAnalyzer())
+        s.decide(board_after(*setup[:1]))
+        d = s.decide(b)
+        self.assertEqual(len(d.messages), 1, d.messages)
+        self.assertTrue(d.messages[0].startswith("Trap set!"), d.messages)
+
+    def test_explorer_failure_is_silent(self):
+        s = Session(chess.BLACK, FakeExplorer(), FakeAnalyzer(fail=True))
+        d = s.decide(board_after("e4"))
+        self.assertEqual(d, Decision(None, True, []))
+
+    def test_takeback_and_resume(self):
+        s = Session(chess.WHITE, FakeExplorer(), FakeAnalyzer(each=150))
+        plies = ["e4", "e5", "Nf3", "Nc6", "Bc4", "Nf6"]
+        said = []
+        for n in (2, 4, 6, 4, 6):
+            said.append(s.decide(board_after(*plies[:n])).messages)
+        self.assertEqual([len(m) for m in said], [1, 1, 1, 0, 0])
+
+        resumed = Session(chess.WHITE, FakeExplorer(), FakeAnalyzer(each=150))
+        twenty = board_after(*("Nf3 Nf6 Ng1 Ng8 " * 5).split())
+        self.assertEqual(resumed.decide(twenty).messages, [])
+        self.assertFalse(resumed.in_opening)
+
+    def test_opening_ends_by_move_15(self):
+        lots = [stat("a2a3", "a3", 1000)]
+        s = Session(chess.WHITE, FakeExplorer(default_masters=lots), FakeAnalyzer())
+        s.decide(chess.Board())
+        shuffle = ("Nf3 Nf6 Ng1 Ng8 " * 8).split()  # 32 plies: move 17
+        d = s.decide(board_after(*shuffle))
+        self.assertEqual(sum(m.startswith("Opening over") for m in d.messages), 1, d.messages)
+        self.assertFalse(s.in_opening)
+        d = s.decide(board_after(*shuffle, "Nf3", "Nf6"))
+        self.assertEqual(d.messages, [])
+
+    def test_level_after_opening(self):
+        twenty = board_after(*("Nf3 Nf6 Ng1 Ng8 " * 5).split())
+        s = Session(chess.WHITE, FakeExplorer(), FakeAnalyzer(), level=800)
+        self.assertFalse(s.decide(twenty).full_strength)
+        s = Session(chess.WHITE, FakeExplorer(), FakeAnalyzer(), level=None)
+        self.assertTrue(s.decide(twenty).full_strength)
+
+
+if __name__ == "__main__":
+    unittest.main()
