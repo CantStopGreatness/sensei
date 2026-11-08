@@ -27,3 +27,7 @@ jobs:
           python3 tests/selfplay.py --games 20 --vs-random
       - name: Pondering over UCI (go ponder, ponderhit, stop)
         run: python3 tests/ponder_test.py
+      - name: Opening coach (explorer, openings, traps checked by the engine, judge, session)
+        run: |
+          pip install requests
+          python3 -m unittest discover -s tests/coach -t . -v

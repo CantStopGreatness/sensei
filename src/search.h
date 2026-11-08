@@ -15,6 +15,10 @@ struct SearchLimits {
     // the clock starts and the limits apply from that moment. nullptr = not a ponder search.
     const std::atomic<bool>* pondering = nullptr;
     int threads = 1;  // search threads, main one included (UCI option Threads)
+    // Strength limit (UCI_Elo, 400..2400); 0 = full strength. Caps the depth and picks among root
+    // moves at random, weighted by score, so lower levels play weaker moves more often.
+    int elo = 0;
+    uint32_t seed = 0;  // random seed for the weighted pick; 0 = seed from std::random_device
 };
 
 struct SearchResult {

@@ -258,6 +258,53 @@ int main() {
                                            std::to_string(r.nodes) + " nodes");
     }
 
+    std::cout << "\nStrength limit\n";
+    {
+        auto limited = [](const std::string& fen, int elo, uint32_t seed) {
+            Position pos = from_fen(fen);
+            std::atomic<bool> stop{false};
+            std::ostringstream sink;
+            SearchLimits limits;
+            limits.time_ms = 200;
+            limits.elo = elo;
+            limits.seed = seed;
+            return search(pos, limits, stop, sink).best;
+        };
+        std::vector<std::string> seen;
+        bool all_legal = true;
+        Position start = from_fen(START_FEN);
+        MoveList legal;
+        generate_legal(start, legal);
+        for (uint32_t seed = 1; seed <= 40; seed++) {
+            Move m = limited(START_FEN, 400, seed);
+            all_legal &= std::find(legal.begin(), legal.end(), m) != legal.end();
+            if (std::find(seen.begin(), seen.end(), move_to_uci(m)) == seen.end()) seen.push_back(move_to_uci(m));
+        }
+        check(seen.size() >= 8 && all_legal, "elo 400 varies its moves: " + std::to_string(seen.size()) + " distinct");
+
+        int took = 0;
+        for (uint32_t seed = 1; seed <= 20; seed++)
+            took += move_to_uci(limited("rnb1kbnr/pppp1ppp/8/4p1q1/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 1", 2000, seed)) == "c1g5";
+        check(took >= 18, "elo 2000 takes a free queen: " + std::to_string(took) + "/20");
+
+        int mated = 0;
+        for (uint32_t seed = 1; seed <= 20; seed++)
+            mated += move_to_uci(limited("6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1", 400, seed)) == "d1d8";
+        check(mated == 20, "elo 400 still plays mate in 1: " + std::to_string(mated) + "/20");
+
+        Position a = from_fen(START_FEN), b = from_fen(START_FEN);
+        TT.clear();
+        SearchResult full = run(a, 6);
+        TT.clear();
+        std::atomic<bool> stop{false};
+        std::ostringstream sink;
+        SearchLimits limits;
+        limits.depth = 6;
+        limits.elo = 0;
+        SearchResult zero = search(b, limits, stop, sink);
+        check(full.best == zero.best && full.nodes == zero.nodes, "elo 0 is full strength");
+    }
+
     std::cout << '\n' << (failures ? std::to_string(failures) + " FAILED" : "All tests passed") << '\n';
     return failures ? 1 : 0;
 }
