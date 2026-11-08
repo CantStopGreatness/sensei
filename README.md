@@ -118,3 +118,18 @@ After merging to `main`: `cd ~/sensei-release && git pull && cmake --build build
 | v0.10 | Captures-only quiescence generation, aspiration windows | +70 ± 29 (400 games, 5s+0.05s, SPRT [0,10] passed) |
 
 v0.10 against v0.3 directly: +521 ± 109 (200 games, 5s+0.05s; 95.3% score). Gaps this lopsided compress, so the per-version gains don't simply add up.
+
+### Strength levels (`UCI_Elo`)
+
+`UCI_LimitStrength` caps the search depth (1 ply at 400, 5 at 1600, 10 at 2400). Each move then has a chance of being a loose pick, weighted toward bad moves: 30% at 400, down to 1% at 2400. Otherwise it plays a near-best move. A mate it finds is always played. Each level against the one below, 60 games at 5s+0.05s:
+
+| Higher level vs lower | Elo (±error) |
+|---|---|
+| 800 vs 400 | +352 ± 146 |
+| 1200 vs 800 | +260 ± 120 |
+| 1600 vs 1200 | +280 ± 131 |
+| 2000 vs 1600 | +382 ± 159 |
+| 2400 vs 2000 | +436 ± 204 |
+| full strength vs 2400 | +352 ± 117 |
+
+The levels are in the right order and evenly spaced at the beginner end. The numbers are labels, not Lichess ratings: self-play gaps exaggerate differences, and nobody has calibrated them against people.

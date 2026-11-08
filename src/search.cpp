@@ -323,7 +323,9 @@ SearchResult search(Position& pos, const SearchLimits& limits, const std::atomic
     TT.new_search();
     std::atomic<bool> helpers_stop{false};
     std::vector<std::thread> helpers;
-    const int max_depth = limits.elo > 0 ? std::min(limits.depth, 1 + (limits.elo - 400) / 200) : limits.depth;
+    // Depth cap: 1 ply at 400 up to 5 at 1600, then faster to 10 at 2400 so the top levels lead into full strength.
+    const int elo_depth = limits.elo <= 1600 ? 1 + (limits.elo - 400) / 300 : 5 + (limits.elo - 1600) / 160;
+    const int max_depth = limits.elo > 0 ? std::min(limits.depth, elo_depth) : limits.depth;
     for (int id = 1; id < (limits.elo > 0 ? 1 : limits.threads); id++) {
         helpers.emplace_back([p = pos, &helpers_stop, id]() mutable {  // copy now, before main moves
             auto h = std::make_unique<Searcher>(Searcher{p, helpers_stop, Clock::now(), -1, nullptr});
@@ -385,7 +387,7 @@ SearchResult search(Position& pos, const SearchLimits& limits, const std::atomic
     for (auto& t : helpers) t.join();
 
     // Strength limit: score every root move one ply shallower, then pick one at random with
-    // weight exp((score - best) / T). T shrinks as the level rises; a found mate is always played.
+    // weight exp((score - best) / T). Lower levels blunder more often; a found mate is always played.
     if (limits.elo > 0 && result.best && result.score < MATE - MAX_PLY) {
         MoveList list;
         generate_legal(pos, list);
@@ -402,10 +404,14 @@ SearchResult search(Position& pos, const SearchLimits& limits, const std::atomic
         if (!s.aborted && !scored.empty()) {
             int best = std::max_element(scored.begin(), scored.end(),
                                         [](auto& a, auto& b) { return a.second < b.second; })->second;
-            double t = std::max(10, (2400 - limits.elo) / 8);
+            // Most moves are near-best (small T); with probability `blunder` the pick is loose
+            // (T = 300 cp), which is where weaker levels hang material.
+            std::mt19937 rng(limits.seed ? limits.seed : std::random_device{}());
+            double blunder = 0.01 + 0.29 * (2400 - limits.elo) / 2000.0;
+            bool loose = std::uniform_real_distribution<double>(0, 1)(rng) < blunder;
+            double t = loose ? 300 : 10 + (2400 - limits.elo) / 100;
             std::vector<double> w;
             for (auto& [m, sc] : scored) w.push_back(std::exp((sc - best) / t));
-            std::mt19937 rng(limits.seed ? limits.seed : std::random_device{}());
             Move pick = scored[std::discrete_distribution<size_t>(w.begin(), w.end())(rng)].first;
             if (pick != result.best) result.ponder = 0;
             result.best = pick;
