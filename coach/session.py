@@ -5,8 +5,8 @@ from dataclasses import dataclass, field
 
 import chess
 
-from coach.judge import (COLOR, fit, judge, msg_gambit, msg_mistake, msg_offbook, msg_summary,
-                         msg_trap_setter, msg_trap_warning, numbered_san)
+from coach.judge import (COLOR, board_link, fit, good_moves, judge, msg_gambit, msg_mistake, msg_offbook,
+                         msg_summary, msg_trap_setter, msg_trap_warning, numbered_san, with_squares)
 from coach.openings import Opening, family, find, name_for
 from coach.traps import live_trap
 
@@ -89,9 +89,7 @@ class Session:
         beginner_moved = ply > 0 and board.turn == self.color
         if beginner_moved and ply > self.last_judged_ply:
             self.last_judged_ply = ply
-            msg = self._comment_on_beginner(board)
-            if msg:
-                messages.append(msg)
+            messages.extend(self._comment_on_beginner(board))
 
         if self._opening_over(board):
             self.in_opening = False
@@ -112,7 +110,9 @@ class Session:
                 messages.append(msg_trap_warning(trap))
         return Decision(move, True, messages)
 
-    def _comment_on_beginner(self, board: chess.Board) -> str | None:
+    def _comment_on_beginner(self, board: chess.Board) -> list[str]:
+        """One message about the beginner's move; a mistake or off-book move also gets a board
+        image link showing the top good move."""
         before = board.copy()
         move = before.pop()
         masters = self.explorer.masters(before)
@@ -129,21 +129,25 @@ class Session:
         if v.kind == "mistake":
             self.punish_next = True
             self._note_left_book(before, book_san if v.from_book else None)
-            return msg_mistake(v, move_san, book_san, book_name)
+            goods, from_book = good_moves(before, masters, self.analyzer)
+            return self._with_link(before, goods, msg_mistake(v, move_san, self._squares(before, goods), from_book))
 
         trap = live_trap(board)
         if trap and board.turn == self.color:
-            return msg_trap_setter(trap, COLOR[self.color])
+            return [msg_trap_setter(trap, COLOR[self.color])]
 
         stray = self._stray(before, move)
         if stray:
-            return stray
+            return [stray]
 
         if v.kind == "offbook" and masters:
             self._note_left_book(before, book_san)
             common = human[0] if human else None
             common_san = numbered_san(before, chess.Move.from_uci(common.uci)) if common else None
-            return msg_offbook(move_san, book_san, book_name, common_san)
+            goods, _ = good_moves(before, masters, self.analyzer)
+            goods = goods or [v.best]
+            return self._with_link(before, goods,
+                                   msg_offbook(move_san, self._squares(before, goods), book_name, common_san))
 
         # Once a game, when the beginner's own move offers a gambit: name the strong reply.
         name, before_name = name_for(board), name_for(before) or ""
@@ -152,8 +156,15 @@ class Session:
             answer = self._gambit_answer(board)
             if answer:
                 self.gambit_said = True
-                return msg_gambit(name, numbered_san(board, answer))
-        return None
+                return [msg_gambit(name, numbered_san(board, answer))]
+        return []
+
+    @staticmethod
+    def _squares(board: chess.Board, moves: list[chess.Move]) -> list[str]:
+        return [with_squares(board, m) for m in moves]
+
+    def _with_link(self, before: chess.Board, goods: list[chess.Move], text: str) -> list[str]:
+        return [text, board_link(before, goods[0], before.turn)] if goods else [text]
 
     def _note_left_book(self, before: chess.Board, book_san: str | None) -> None:
         if self.left_at is None:

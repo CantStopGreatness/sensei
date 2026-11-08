@@ -174,9 +174,24 @@ class SessionTest(unittest.TestCase):
         s = Session(chess.WHITE, FakeExplorer(), FakeAnalyzer(each=150))
         s.analyzer.refutation = lambda board: [chess.Move.from_uci("g8f6")] if board.turn == chess.BLACK else []
         d = s.decide(board_after("e4", "f6"))
-        self.assertEqual(len(d.messages), 1)
+        self.assertEqual(len(d.messages), 2, d.messages)  # the text, then the board link
         self.assertNotIn("Book", d.messages[0])
         self.assertNotIn("None", d.messages[0])
+        self.assertIn("Better was Nf6 (g8→f6).", d.messages[0])
+        self.assertIn("lastMove=g8f6&color=black", d.messages[1])
+
+    def test_offbook_names_good_moves_and_links_the_top_one(self):
+        before = board_after("e4", "e5", "Nf3", "Nc6")
+        ex = FakeExplorer({before.epd(): [stat("f1b5", "Bb5", 900), stat("f1c4", "Bc4", 800),
+                                          stat("d2d4", "d4", 600), stat("b1c3", "Nc3", 500)]})
+        s = Session(chess.BLACK, ex, FakeAnalyzer())
+        s.decide(board_after("e4"))
+        d = s.decide(board_after("e4", "e5", "Nf3", "Nc6", "a3"))
+        self.assertEqual(len(d.messages), 2, d.messages)
+        self.assertIn("Bb5 (f1→b5), Bc4 (f1→c4), d4 (d2→d4)", d.messages[0])
+        self.assertNotIn("Nc3", d.messages[0])
+        self.assertEqual(d.messages[1], "https://lichess1.org/export/fen.gif?fen="
+                         "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R&lastMove=f1b5&color=white")
 
 
 if __name__ == "__main__":

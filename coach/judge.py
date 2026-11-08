@@ -8,6 +8,8 @@ import chess.engine
 from coach.explorer import MoveStat
 
 MISTAKE_CP = 150
+GOOD_CP = 50  # a book move this close to the engine's best counts as good
+MAX_GOOD = 3
 MATE = 10000
 VALUE = {chess.PAWN: 1, chess.KNIGHT: 3, chess.BISHOP: 3, chess.ROOK: 5, chess.QUEEN: 9}
 COLOR = {chess.WHITE: "White", chess.BLACK: "Black"}
@@ -75,6 +77,41 @@ def judge(before: chess.Board, move: chess.Move, masters: list[MoveStat] | None,
     return Verdict("offbook", loss, best, None, from_book)
 
 
+def good_moves(before: chess.Board, masters: list[MoveStat] | None,
+               an: Analyzer) -> tuple[list[chess.Move], bool]:
+    """Up to three masters book moves, most played first, each within GOOD_CP of the engine's
+    best; else the engine's best alone. The flag says whether the moves came from the book."""
+    best = an.score(before)
+    good = []
+    # ponytail: one engine call per candidate (~0.4 s each), at most 5 candidates
+    for s in [s for s in masters or [] if s.games >= 10][:5]:
+        m = chess.Move.from_uci(s.uci)
+        if not before.is_legal(m):
+            continue
+        after = before.copy()
+        after.push(m)
+        if best + an.score(after) <= GOOD_CP:
+            good.append(m)
+            if len(good) == MAX_GOOD:
+                break
+    if good:
+        return good, True
+    engine_best = next(iter(an.refutation(before)), None)
+    return ([engine_best] if engine_best else []), False
+
+
+def with_squares(board: chess.Board, move: chess.Move) -> str:
+    """"Bb5 (f1→b5)": the move and where the piece goes, easy to find on the board."""
+    return f"{board.san(move)} ({chess.square_name(move.from_square)}→{chess.square_name(move.to_square)})"
+
+
+def board_link(board: chess.Board, move: chess.Move, color: chess.Color) -> str:
+    """A Lichess image of `board` from `color`'s side with the move's two squares highlighted."""
+    side = "white" if color == chess.WHITE else "black"
+    return (f"https://lichess1.org/export/fen.gif?fen={board.board_fen()}"
+            f"&lastMove={move.uci()[:4]}&color={side}")
+
+
 def numbered_san(board: chess.Board, move: chess.Move) -> str:
     dots = "." if board.turn == chess.WHITE else "..."
     return f"{board.fullmove_number}{dots}{board.san(move)}"
@@ -121,18 +158,19 @@ def fit(text: str, limit: int = 140, names: tuple[str, ...] = ()) -> str:
     return text if len(text) <= limit else text[:limit - 1].rstrip() + "…"
 
 
-def msg_mistake(v: Verdict, move_san: str, book_san: str | None, book_name: str | None) -> str:
+def msg_mistake(v: Verdict, move_san: str, goods: list[str], from_book: bool) -> str:
     text = f"{move_san} was a mistake: {v.consequence}."
-    if book_san and v.from_book:
-        text += f" Book here is {book_san}" + (f" ({book_name})." if book_name else ".")
-    elif book_san:
-        text += f" Better was {book_san}."  # the engine's move: never call it book
-    return fit(text, names=(book_name or "",))
+    if goods and from_book:
+        text += f" Good here: {', '.join(goods)}."
+    elif goods:
+        text += f" Better was {goods[0]}."  # the engine's move: never call it book
+    return fit(text)
 
 
-def msg_offbook(move_san: str, book_san: str, book_name: str | None, common_san: str | None) -> str:
-    text = f"Book here is {book_san}" + (f" ({book_name})" if book_name else "")
-    if common_san and common_san != book_san:
+def msg_offbook(move_san: str, goods: list[str], book_name: str | None, common_san: str | None) -> str:
+    book_san = goods[0].split(" ")[0] if goods else None
+    text = f"Book here: {', '.join(goods)}" + (f" ({book_name})" if book_name else "")
+    if common_san and common_san.split(".")[-1] != book_san:
         text += f"; most played at your level: {common_san}"
     return fit(text + f". Your {move_san} is playable.", names=(book_name or "",))
 
