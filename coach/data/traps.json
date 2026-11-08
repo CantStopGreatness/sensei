@@ -1,0 +1,542 @@
+[
+ {
+  "name": "Légal's mate",
+  "setup": [
+   "e4",
+   "e5",
+   "Nf3",
+   "d6",
+   "Bc4",
+   "Bg4",
+   "Nc3",
+   "g6",
+   "Nxe5"
+  ],
+  "bait": "Bxd1",
+  "punish": "Bxf7+",
+  "note": "Taking the queen allows Bxf7+ and Nd5 mate."
+ },
+ {
+  "name": "Légal's mate with ...Nc6",
+  "setup": [
+   "e4",
+   "e5",
+   "Nf3",
+   "Nc6",
+   "Bc4",
+   "d6",
+   "Nc3",
+   "Bg4",
+   "h3",
+   "Bh5",
+   "Nxe5"
+  ],
+  "bait": "Bxd1",
+  "punish": "Bxf7+",
+  "note": "Taking the queen allows Bxf7+ and Nd5 mate."
+ },
+ {
+  "name": "Fishing Pole",
+  "setup": [
+   "e4",
+   "e5",
+   "Nf3",
+   "Nc6",
+   "Bb5",
+   "Nf6",
+   "O-O",
+   "Ng4",
+   "h3",
+   "h5"
+  ],
+  "bait": "hxg4",
+  "punish": "hxg4",
+  "note": "Opening the h-file lets Black's queen mate."
+ },
+ {
+  "name": "Elephant Trap",
+  "setup": [
+   "d4",
+   "d5",
+   "c4",
+   "e6",
+   "Nc3",
+   "Nf6",
+   "Bg5",
+   "Nbd7",
+   "cxd5",
+   "exd5"
+  ],
+  "bait": "Nxd5",
+  "punish": "Nxd5",
+  "note": "Bxd8 Bb4+ wins back the queen and a piece."
+ },
+ {
+  "name": "Englund Gambit Trap",
+  "setup": [
+   "d4",
+   "e5",
+   "dxe5",
+   "Nc6",
+   "Nf3",
+   "Qe7",
+   "Bf4",
+   "Qb4+",
+   "Bd2",
+   "Qxb2"
+  ],
+  "bait": "Bc3",
+  "punish": "Bb4",
+  "note": "Bb4 pins the bishop and Qc1 mates."
+ },
+ {
+  "name": "Lasker Trap",
+  "setup": [
+   "d4",
+   "d5",
+   "c4",
+   "e5",
+   "dxe5",
+   "d4",
+   "e3",
+   "Bb4+",
+   "Bd2",
+   "dxe3"
+  ],
+  "bait": "Bxb4",
+  "punish": "exf2+",
+  "note": "exf2+ and fxg1=N+ wins a rook."
+ },
+ {
+  "name": "Siberian Trap",
+  "setup": [
+   "e4",
+   "c5",
+   "d4",
+   "cxd4",
+   "c3",
+   "dxc3",
+   "Nxc3",
+   "Nc6",
+   "Nf3",
+   "e6",
+   "Bc4",
+   "Qc7",
+   "O-O",
+   "Nf6",
+   "Qe2",
+   "Ng4"
+  ],
+  "bait": "h3",
+  "punish": "Nd4",
+  "note": "Nd4 hits the queen and threatens Qh2 mate."
+ },
+ {
+  "name": "Stafford Gambit Trap",
+  "setup": [
+   "e4",
+   "e5",
+   "Nf3",
+   "Nf6",
+   "Nxe5",
+   "Nc6",
+   "Nxc6",
+   "dxc6",
+   "d3",
+   "Bc5"
+  ],
+  "bait": "Bg5",
+  "punish": "Nxe4",
+  "note": "Bxd8 lets Bxf2+ and Bg4 mate."
+ },
+ {
+  "name": "Scholar's Mate",
+  "setup": [
+   "e4",
+   "e5",
+   "Bc4",
+   "Nc6",
+   "Qh5"
+  ],
+  "bait": "Nf6",
+  "punish": "Qxf7#",
+  "note": "f7 falls with mate."
+ },
+ {
+  "name": "Fool's Mate",
+  "setup": [
+   "f3",
+   "e5"
+  ],
+  "bait": "g4",
+  "punish": "Qh4#",
+  "note": "Qh4 is mate along the open diagonal."
+ },
+ {
+  "name": "Caro-Kann Smothered Mate",
+  "setup": [
+   "e4",
+   "c6",
+   "d4",
+   "d5",
+   "Nc3",
+   "dxe4",
+   "Nxe4",
+   "Nd7",
+   "Qe2"
+  ],
+  "bait": "Ngf6",
+  "punish": "Nd6#",
+  "note": "Nd6 is smothered mate."
+ },
+ {
+  "name": "Kieninger Trap",
+  "setup": [
+   "d4",
+   "Nf6",
+   "c4",
+   "e5",
+   "dxe5",
+   "Ng4",
+   "Bf4",
+   "Nc6",
+   "Nf3",
+   "Bb4+",
+   "Nbd2",
+   "Qe7",
+   "a3",
+   "Ngxe5"
+  ],
+  "bait": "axb4",
+  "punish": "Nd3#",
+  "note": "Nd3 is smothered mate."
+ },
+ {
+  "name": "Early ...h6 in the Two Knights",
+  "setup": [
+   "e4",
+   "e5",
+   "Nf3",
+   "Nc6",
+   "Bc4",
+   "Nf6",
+   "Ng5"
+  ],
+  "bait": "h6",
+  "punish": "Nxf7",
+  "note": "Nxf7 forks the queen and rook."
+ },
+ {
+  "name": "Petrov Copycat Trap",
+  "setup": [
+   "e4",
+   "e5",
+   "Nf3",
+   "Nf6",
+   "Nxe5",
+   "Nxe4",
+   "Qe2"
+  ],
+  "bait": "Nf6",
+  "punish": "Nc6+",
+  "note": "Nc6+ uncovers an attack on the queen."
+ },
+ {
+  "name": "Falkbeer ...Bc5 Trap",
+  "setup": [
+   "e4",
+   "e5",
+   "f4",
+   "Bc5"
+  ],
+  "bait": "fxe5",
+  "punish": "Qh4+",
+  "note": "Qh4+ and Qxe4+ win the rook on h1."
+ },
+ {
+  "name": "Dutch Bg6 Mate",
+  "setup": [
+   "d4",
+   "f5",
+   "Bg5",
+   "h6",
+   "Bh4",
+   "g5",
+   "Bg3",
+   "f4",
+   "e3",
+   "h5",
+   "Bd3"
+  ],
+  "bait": "Rh6",
+  "punish": "Qxh5+",
+  "note": "Qxh5+ Rxh5 Bg6 is mate."
+ },
+ {
+  "name": "From's Gambit Trap",
+  "setup": [
+   "f4",
+   "e5",
+   "fxe5",
+   "d6",
+   "exd6",
+   "Bxd6"
+  ],
+  "bait": "Nc3",
+  "punish": "Qh4+",
+  "note": "Qh4+ g3 Qxg3+ hxg3 Bxg3 is mate."
+ },
+ {
+  "name": "Vienna ...Nxe4 Qh5 Trap",
+  "setup": [
+   "e4",
+   "e5",
+   "Nc3",
+   "Nf6",
+   "Bc4",
+   "Nxe4",
+   "Qh5"
+  ],
+  "bait": "Nf6",
+  "punish": "Qxf7#",
+  "note": "Qxf7 is mate."
+ },
+ {
+  "name": "Kiddie Queen Trap",
+  "setup": [
+   "e4",
+   "e5",
+   "Qh5",
+   "Nc6",
+   "Bc4",
+   "g6",
+   "Qf3"
+  ],
+  "bait": "Nd4",
+  "punish": "Qxf7#",
+  "note": "Qxf7 is mate."
+ },
+ {
+  "name": "Fajarowicz Trap",
+  "setup": [
+   "d4",
+   "Nf6",
+   "c4",
+   "e5",
+   "dxe5",
+   "Ne4",
+   "Nf3",
+   "d6",
+   "exd6",
+   "Bxd6"
+  ],
+  "bait": "g3",
+  "punish": "Nxf2",
+  "note": "Nxf2 and Bxg3+ wrecks the king."
+ },
+ {
+  "name": "Bird Defense Qg5 Trap",
+  "setup": [
+   "e4",
+   "e5",
+   "Nf3",
+   "Nc6",
+   "Bb5",
+   "Nd4"
+  ],
+  "bait": "Nxe5",
+  "punish": "Qg5",
+  "note": "Qg5 hits e5 and g2."
+ },
+ {
+  "name": "Rubinstein Trap",
+  "setup": [
+   "d4",
+   "d5",
+   "c4",
+   "e6",
+   "Nc3",
+   "Nf6",
+   "Bg5",
+   "Be7",
+   "e3",
+   "O-O",
+   "Nf3",
+   "Nbd7",
+   "Rc1",
+   "c6",
+   "Bd3",
+   "a6",
+   "cxd5",
+   "exd5"
+  ],
+  "bait": "Nxd5",
+  "punish": "Nxd5",
+  "note": "Nxd5 Bxg5 drops the knight."
+ },
+ {
+  "name": "Blackburne Shilling Gambit",
+  "setup": [
+   "e4",
+   "e5",
+   "Nf3",
+   "Nc6",
+   "Bc4",
+   "Nd4",
+   "Nxe5",
+   "Qg5"
+  ],
+  "bait": "Nxf7",
+  "punish": "Qxg2",
+  "note": "Qxg2 hits the rook and mate follows on f3."
+ },
+ {
+  "name": "Blackburne Shilling Mate",
+  "setup": [
+   "e4",
+   "e5",
+   "Nf3",
+   "Nc6",
+   "Bc4",
+   "Nd4",
+   "Nxe5",
+   "Qg5",
+   "Nxf7",
+   "Qxg2",
+   "Rf1",
+   "Qxe4+"
+  ],
+  "bait": "Be2",
+  "punish": "Nf3#",
+  "note": "Nf3 is smothered mate."
+ },
+ {
+  "name": "French Nxd4 Trap",
+  "setup": [
+   "e4",
+   "e6",
+   "d4",
+   "d5",
+   "e5",
+   "c5",
+   "c3",
+   "Nc6",
+   "Nf3",
+   "Qb6",
+   "Bd3",
+   "cxd4",
+   "cxd4",
+   "Nxd4",
+   "Nxd4"
+  ],
+  "bait": "Qxd4",
+  "punish": "Bb5+",
+  "note": "Bb5+ uncovers Qxd4 and wins the queen."
+ },
+ {
+  "name": "Early ...Nge7 Trap",
+  "setup": [
+   "e4",
+   "e5",
+   "Nf3",
+   "Nc6",
+   "Bc4",
+   "Nge7",
+   "Ng5"
+  ],
+  "bait": "h6",
+  "punish": "Nxf7",
+  "note": "Nxf7 forks the queen and rook."
+ },
+ {
+  "name": "Englund ...Ne3 Trap",
+  "setup": [
+   "d4",
+   "Nf6",
+   "Nd2",
+   "e5",
+   "dxe5",
+   "Ng4",
+   "h3",
+   "Ne3"
+  ],
+  "bait": "fxe3",
+  "punish": "Qh4+",
+  "note": "Qh4+ g3 Qxg3 is mate."
+ },
+ {
+  "name": "Berlin Nxb5 Trap",
+  "setup": [
+   "e4",
+   "e5",
+   "Nf3",
+   "Nc6",
+   "Bb5",
+   "Nf6",
+   "O-O",
+   "Nxe4",
+   "Re1",
+   "Nd6",
+   "Nxe5"
+  ],
+  "bait": "Nxb5",
+  "punish": "Nxc6+",
+  "note": "Nxc6+ is a discovered check that wins the queen."
+ },
+ {
+  "name": "Fool's Mate with ...e6",
+  "setup": [
+   "f3",
+   "e6"
+  ],
+  "bait": "g4",
+  "punish": "Qh4#",
+  "note": "Qh4 is mate along the open diagonal."
+ },
+ {
+  "name": "Scholar's Mate with ...Bc5",
+  "setup": [
+   "e4",
+   "e5",
+   "Bc4",
+   "Bc5",
+   "Qh5"
+  ],
+  "bait": "Nf6",
+  "punish": "Qxf7#",
+  "note": "f7 falls with mate."
+ },
+ {
+  "name": "Scholar's Mate with Qf3",
+  "setup": [
+   "e4",
+   "e5",
+   "Bc4",
+   "Bc5",
+   "Qf3"
+  ],
+  "bait": "Nc6",
+  "punish": "Qxf7#",
+  "note": "f7 falls with mate."
+ },
+ {
+  "name": "Englund Mate",
+  "setup": [
+   "d4",
+   "e5",
+   "dxe5",
+   "Nc6",
+   "Nf3",
+   "Qe7",
+   "Bf4",
+   "Qb4+",
+   "Bd2",
+   "Qxb2",
+   "Bc3",
+   "Bb4"
+  ],
+  "bait": "Qd2",
+  "punish": "Bxc3",
+  "note": "Bxc3 Qxc3 Qc1+ ends in mate."
+ }
+]
