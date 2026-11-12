@@ -57,7 +57,7 @@ Perft numbers come from the [Chess Programming Wiki](https://www.chessprogrammin
 Sensei plays through [lichess-bot](https://github.com/lichess-bot-devs/lichess-bot) (Python 3.11+), using `deploy/lichess-bot.yml`.
 
 1. Create a **new** Lichess account. It must have no games played, or it can't become a bot.
-2. Create a token with the `bot:play` scope: <https://lichess.org/account/oauth/token/create?scopes%5B%5D=bot:play&description=lichess-bot>. Lichess shows it only once.
+2. Create a token with the `bot:play` and `study:write` scopes: <https://lichess.org/account/oauth/token/create?scopes%5B%5D=bot:play&scopes%5B%5D=study:write&description=lichess-bot>. Lichess shows it only once. `study:write` lets the opening coach post a review study after each coached game; without it the review is skipped.
 3. Make a release clone of Sensei just for the bot, so the bot only ever plays `main`, never a development build. Then clone lichess-bot next to it and install it:
    ```bash
    cd ~ && git clone https://github.com/CantStopGreatness/sensei.git sensei-release
