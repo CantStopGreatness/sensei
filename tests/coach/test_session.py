@@ -192,6 +192,12 @@ class SessionTest(unittest.TestCase):
         self.assertNotIn("Nc3", d.messages[0])
         self.assertEqual(d.messages[1], "https://lichess1.org/export/fen.gif?fen="
                          "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R&lastMove=f1b5&color=white")
+        # Kept for the end-of-game review: the words (no link) and arrows for the good moves.
+        self.assertEqual(len(s.moments), 1)
+        m = s.moments[0]
+        self.assertEqual((m.ply, m.text), (5, d.messages[0]))
+        self.assertEqual(m.arrows, [(chess.F1, chess.B5, "green"), (chess.F1, chess.C4, "green"),
+                                    (chess.D2, chess.D4, "green"), (chess.A2, chess.A3, "blue")])
 
 
 if __name__ == "__main__":
