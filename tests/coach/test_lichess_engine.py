@@ -62,6 +62,30 @@ class LichessEngineTest(unittest.TestCase):
         self.assertEqual(coach.session.level, 800)
         self.assertEqual(posted, [])
 
+    def test_review_is_posted_once_after_the_game(self):
+        import chess
+        from coach.lichess_engine import SenseiCoach
+        from coach.session import Moment, Session
+        posted, published = [], []
+        coach = SenseiCoach.__new__(SenseiCoach)
+        coach.coaching, coach.reviewed = True, False
+        coach.session = Session(chess.BLACK, None, None)
+        coach.session.moments = [Moment(1, "Book here: e4.", [])]
+        coach.chat = type("Chat", (), {"post": lambda self, t: posted.append(t)})()
+        coach.studies = type("Studies", (), {"publish": lambda self, *a: published.append(a) or "https://lichess.org/study/abc/x"})()
+        coach.engine = type("Engine", (), {"send_game_result": lambda self, *a: None})()
+        game, board = game_full(white="beginner", white_title=None, black="BigElephant67", black_title="BOT"), chess.Board()
+        board.push_san("e4")
+        coach.send_game_result(game, board)
+        coach.send_game_result(game, board)
+        self.assertEqual(len(published), 1)
+        self.assertEqual(published[0][2], chess.WHITE)  # the beginner's side
+        self.assertEqual(posted, ["Your opening review, with arrows: https://lichess.org/study/abc/x"])
+
+        coach.reviewed, coach.session.moments, posted[:] = False, [], []
+        coach.send_game_result(game, board)
+        self.assertEqual(posted, [])  # nothing to review
+
     def test_time_spent_is_charged(self):
         import chess
         import chess.engine

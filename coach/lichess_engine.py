@@ -16,7 +16,8 @@ import chess.engine
 import requests
 
 from coach.explorer import Explorer
-from coach.judge import Analyzer
+from coach.judge import Analyzer, fit
+from coach.review import StudyClient, review_pgn
 from coach.session import Session
 from lib.config import Configuration
 from lib.engine_wrapper import UCIEngine
@@ -95,7 +96,10 @@ class SenseiCoach(UCIEngine):
             self.opponent = (game.opponent.name or "").lower()
             self.me = (game.me.name or "").lower()
             self.session = Session(color, Explorer(), Analyzer(self.engine))
-            self.chat = ChatClient(game.id, os.environ.get("LICHESS_BOT_TOKEN", ""), base_url=game.base_url)
+            token = os.environ.get("LICHESS_BOT_TOKEN", "")
+            self.chat = ChatClient(game.id, token, base_url=game.base_url)
+            self.studies = StudyClient(token, base_url=game.base_url)
+            self.reviewed = False
             self.chat_seen = None  # chat lines already read; None until the first read
             self.greeted = False
             log.info("Coaching game %s against %s", game.id, game.opponent.name)
@@ -143,6 +147,18 @@ class SenseiCoach(UCIEngine):
         else:
             self.engine.configure({"UCI_LimitStrength": True, "UCI_Elo": level})
         return super().search(board, time_limit, False, draw_offered, root_moves)
+
+    def send_game_result(self, game, board) -> None:
+        """At the end of a coached game, post a study of it with every comment and arrow."""
+        super().send_game_result(game, board)
+        if not self.coaching or self.reviewed or not self.session.moments:
+            return
+        self.reviewed = True  # lichess-bot can report the result more than once
+        white, black = game.white.name, game.black.name
+        pgn = review_pgn(board, self.session.moments, white, black)
+        url = self.studies.publish(f"Sensei review: {white} vs {black}", pgn, not self.session.color)
+        if url:
+            self.chat.post(fit(f"Your opening review, with arrows: {url}"))
 
     def _read_chat(self, replay: bool = True, lines: list[tuple[str, str]] | None = None) -> bool:
         """Apply the opponent's new chat commands and post the replies (unless `replay` is

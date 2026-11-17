@@ -18,6 +18,14 @@ GAMBIT_MIN_GAMES = 25
 
 
 @dataclass
+class Moment:
+    """A coaching comment kept for the end-of-game review."""
+    ply: int  # plies played when it was said
+    text: str
+    arrows: list[tuple[chess.Square, chess.Square, str]]  # drawn on the position before that ply
+
+
+@dataclass
 class Decision:
     move: chess.Move | None  # None: let the engine search
     full_strength: bool
@@ -39,6 +47,8 @@ class Session:
         self.left_at: int | None = None
         self.left_book_san: str | None = None
         self.gambit_said = False
+        self.moments: list[Moment] = []
+        self._arrows: list[tuple[chess.Square, chess.Square, str]] = []
 
     # ---- chat ---------------------------------------------------------------------------------
 
@@ -72,10 +82,15 @@ class Session:
 
     def decide(self, board: chess.Board) -> Decision:
         try:
-            return self._decide(board)
+            d = self._decide(board)
         except Exception:
             log.exception("coach failed; playing an engine move")
             return Decision(None, self.in_opening, [])
+        words = [m for m in d.messages if not m.startswith("https://")]
+        if words:
+            self.moments.append(Moment(len(board.move_stack), " ".join(words), self._arrows))
+        self._arrows = []
+        return d
 
     def _decide(self, board: chess.Board) -> Decision:
         ply = len(board.move_stack)
@@ -130,7 +145,8 @@ class Session:
             self.punish_next = True
             self._note_left_book(before, book_san if v.from_book else None)
             goods, from_book = good_moves(before, masters, self.analyzer)
-            return self._with_link(before, goods, msg_mistake(v, move_san, self._squares(before, goods), from_book))
+            return self._with_link(before, goods, move, "red",
+                                   msg_mistake(v, move_san, self._squares(before, goods), from_book))
 
         trap = live_trap(board)
         if trap and board.turn == self.color:
@@ -146,7 +162,7 @@ class Session:
             common_san = numbered_san(before, chess.Move.from_uci(common.uci)) if common else None
             goods, _ = good_moves(before, masters, self.analyzer)
             goods = goods or [v.best]
-            return self._with_link(before, goods,
+            return self._with_link(before, goods, move, "blue",
                                    msg_offbook(move_san, self._squares(before, goods), book_name, common_san))
 
         # Once a game, when the beginner's own move offers a gambit: name the strong reply.
@@ -163,7 +179,12 @@ class Session:
     def _squares(board: chess.Board, moves: list[chess.Move]) -> list[str]:
         return [with_squares(board, m) for m in moves]
 
-    def _with_link(self, before: chess.Board, goods: list[chess.Move], text: str) -> list[str]:
+    def _with_link(self, before: chess.Board, goods: list[chess.Move], played: chess.Move, color: str,
+                   text: str) -> list[str]:
+        """The text plus a board image of the top good move; the review gets every good move as a
+        green arrow and the played one in `color`."""
+        self._arrows = [(m.from_square, m.to_square, "green") for m in goods]
+        self._arrows.append((played.from_square, played.to_square, color))
         return [text, board_link(before, goods[0], before.turn)] if goods else [text]
 
     def _note_left_book(self, before: chess.Board, book_san: str | None) -> None:
